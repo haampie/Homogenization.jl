@@ -31,7 +31,7 @@ end
 """
 Sort each small tuple of a large vector.
 """
-function sort_element_nodes!(v::Vector{NTuple{N,Ti}}) where {N,Ti<:Integer}
+function sort_element_nodes!(v::Vector)
     @inbounds for i = eachindex(v)
         v[i] = sort_bitonic(v[i])
     end
@@ -59,17 +59,66 @@ function counting_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer}
 
         # Cumulate
         for i = 1 : max
-            count[i+1] += count[i]
+            count[i + 1] += count[i]
         end
 
         # Move
         for i = 1 : n
-            aux[count[v[i][d]] += 1] = v[i];
+            aux[count[v[i][d]] += 1] = v[i]
         end
 
         # Copy
-        v, aux = aux, v
+        copy!(v, aux)
     end
 
     return v
+end
+
+function remove_duplicates!(vec::Vector)
+    n = length(vec)
+
+    # Can only be unique
+    n ≤ 1 && return vec
+
+    # Discard repeated entries
+    slow = 1
+    @inbounds for fast = 2 : n
+        vec[slow] == vec[fast] && continue
+        slow += 1
+        vec[slow] = vec[fast]
+    end
+
+    # Return the resized vector with unique elements
+    return resize!(vec, slow)
+end
+
+
+"""
+    binary_search(v, x, lo, hi)
+
+Return the index of the first occurence of x in v[lo:hi]
+"""
+function binary_search(v::AbstractVector, x, lo::Ti, hi::Ti) where {Ti <: Integer}
+    lo -= one(Ti)
+    hi += one(Ti)
+    @inbounds while lo < hi - one(Ti)
+        m = (lo + hi) >>> 1
+        if v[m] < x
+            lo = m
+        else
+            hi = m
+        end
+    end
+    return hi
+end
+
+"""
+Sort the nodes in the adjacency list
+"""
+function sort_edges!(g::SparseGraph)
+    @inbounds for i = 1 : length(g.ptr) - 1
+        sort!(g.adj, Int(g.ptr[i]), g.ptr[i + 1] - 1, QuickSort, Base.Order.Forward)
+    end
+
+    return g
 end

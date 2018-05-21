@@ -1,20 +1,19 @@
 module Rewrite
 
-using StaticArrays
+using StaticArrays, WriteVTK
 
+include("grid.jl")
+
+include("sparse_graph.jl")
+include("interpolation.jl")
 include("sorting_tricks.jl")
 include("utils.jl")
 
-function my_grid()
-    nodes = SVector{2,Float64}[
-        (0.0, 0.0),
-        (0.0, 1.0),
-        (1.0, 1.0),
-        (0.0, 1.0),
-        (2.0, 1.0)
-    ]
+include("tri.jl")
 
-    cells = [(1, 2, 4),(2, 3, 4),(3, 4, 5)]
-end
+include("tri/refine.jl")
+include("tet/refine.jl")
+
+include("multilevel_reference.jl")
 
 end

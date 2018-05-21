@@ -1,6 +1,6 @@
 using Base.Test
 
-using Rewrite: counting_sort!, generate_random_elements
+using Rewrite: counting_sort!, generate_random_elements, sort_element_nodes!
 
 @testset "Counting sort" begin
     v = generate_random_elements(100, 25, 4)
