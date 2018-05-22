@@ -41,12 +41,12 @@ end
 """
 Sort a vector by its tuple value using counting sort.
 """
-function counting_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer}
+function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getindex) where {Tf}
     n = length(v)
     aux = similar(v)
-    count = Vector{Ti}(max + 1)
+    count = Vector{Int}(max + 1)
 
-    @inbounds for d = N : -1 : 1
+    @inbounds for d = radix : -1 : 1
         # Reset the counter
         for i = 1 : max + 1
             count[i] = 0
@@ -54,7 +54,7 @@ function counting_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer}
         
         # Frequency count
         for i = 1 : n
-            count[v[i][d] + 1] += 1
+            count[value(v[i], d) + 1] += 1
         end
 
         # Cumulate
@@ -64,7 +64,7 @@ function counting_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer}
 
         # Move
         for i = 1 : n
-            aux[count[v[i][d]] += 1] = v[i]
+            aux[count[value(v[i], d)] += 1] = v[i]
         end
 
         # Copy
@@ -73,6 +73,8 @@ function counting_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer}
 
     return v
 end
+
+radix_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer} = radix_sort!(v, max, N)
 
 function remove_duplicates!(vec::Vector)
     n = length(vec)

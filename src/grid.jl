@@ -8,6 +8,12 @@ const Tets{Tv,Ti} = Mesh{3,4,Tv,Ti}
 const Tris64 = Tris{Float64,Int64}
 const Tets64 = Tets{Float64,Int64}
 
+function refine_uniformly(m::Mesh; times::Int = 1)
+    for i = 1 : times
+        m = refine_uniformly(m, edge_graph(m))
+    end
+    m
+end
 
 """
 Returns the affine map from the reference element to the given element.
