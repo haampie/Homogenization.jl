@@ -41,10 +41,9 @@ end
 """
 Sort a vector by its tuple value using counting sort.
 """
-function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getindex) where {Tf}
+function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getindex, count = Vector{Int}(max + 1)) where {Tf}
     n = length(v)
     aux = similar(v)
-    count = Vector{Int}(max + 1)
 
     @inbounds for d = radix : -1 : 1
         # Reset the counter
@@ -71,7 +70,7 @@ function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getind
         copy!(v, aux)
     end
 
-    return v
+    v
 end
 
 radix_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer} = radix_sort!(v, max, N)
@@ -123,4 +122,33 @@ function sort_edges!(g::SparseGraph)
     end
 
     return g
+end
+
+"""
+Remove non-repeated elements from an array
+"""
+function remove_singletons!(v::Vector)
+    count = 0
+    slow = 1
+    fast = 1
+
+    @inbounds while fast ≤ length(v)
+        value = v[fast]
+        count = 0
+
+        # Copy them over while equal
+        while fast ≤ length(v) && v[fast] == value
+            v[slow] = v[fast]
+            slow += 1
+            fast += 1
+            count += 1
+        end
+
+        # If it occurs only once, we may overwrite it
+        if count == 1
+            slow -= 1
+        end
+    end
+
+    resize!(v, slow - 1)
 end

@@ -1,6 +1,6 @@
 using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map, 
                refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
-               nodes_on_ref_edges, navigation
+               nodes_on_ref_edges, navigation, face_to_elements, edge_to_elements
 using StaticArrays
 using WriteVTK
 
@@ -147,21 +147,18 @@ function face_coloring()
     sort_element_nodes!(base.elements)
 
     # Get mappings from node, edge, face to element and local ids.
-    node_to_el, edge_to_el, face_to_el = navigation(base)
+    face_to_el = edge_to_elements(base)
 
     # Refine a reference tri
-    ref = refined_element(4, Tets64)
+    ref = refined_element(5, Tets64)
 
     # Get local numbering of the faces / edges / nodes
-    nodes_per_face = nodes_on_ref_faces(ref.levels[end])
-    nodes_on_edges = nodes_on_ref_edges(ref.levels[end])
+    local_face_to_nodes = nodes_on_ref_faces(ref.levels[end])
+    local_edge_to_nodes = nodes_on_ref_edges(ref.levels[end])
 
-    for face in face_to_el
-        println(face) 
-    end
-    return
-    total_nodes_per_face = length(nodes_per_face[1])
-
+    # Well, we could calculate this up front obvsly.
+    total_nodes_per_edge = length(local_edge_to_nodes[1])
+    total_nodes_per_face = length(local_face_to_nodes[1])
     total_fine_nodes = length(ref.levels[end].nodes)
 
     fine_nodes = SVector{3,Float64}[]
@@ -170,24 +167,18 @@ function face_coloring()
     # This will hold the interpolated values with local numbering per base element.
     u_fine = zeros(total_fine_nodes, length(base.elements))
 
-    # List matching faces.
-    face_1 = rand(total_nodes_per_face)
-    u_fine[nodes_per_face[1], 1] .= face_1
-    u_fine[nodes_per_face[1], 2] .= face_1
+    # Loop over all the faces
+    for (i, face) in enumerate(face_to_el.cells)
 
-    face_2 = rand(total_nodes_per_face)
-    u_fine[nodes_per_face[2], 1] .= face_2
-    u_fine[nodes_per_face[1], 3] .= face_2
+        # Generate some random numbers
+        u = sin.((1 : total_nodes_per_edge).^2)
 
-    face_3 = rand(total_nodes_per_face)
-    u_fine[nodes_per_face[3], 1] .= face_3
-    u_fine[nodes_per_face[1], 4] .= face_3
-
-    face_4 = rand(total_nodes_per_face)
-    u_fine[nodes_per_face[4], 1] .= face_4
-    u_fine[nodes_per_face[1], 5] .= face_4
-
-    u_fine[nodes_on_edges, :] = 0.0
+        # Loop over the elements
+        for j = face_to_el.offset[i] : face_to_el.offset[i+1]-1
+            local_face = face_to_el.values[j]
+            u_fine[local_edge_to_nodes[local_face.local_id], local_face.element] .= u
+        end
+    end
 
     let element = base.elements[1]
         # coord transform J * x + b

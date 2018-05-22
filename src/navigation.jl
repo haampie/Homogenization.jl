@@ -1,4 +1,4 @@
-import Base: getindex, @propagate_inbounds, ==
+import Base: getindex, @propagate_inbounds, ==, !=, show
 
 """
 Reference to global element id with local node / edge/ face number.
@@ -16,6 +16,15 @@ end
 const FaceToEl{Ti} = CellToEl{3,Ti}
 const EdgeToEl{Ti} = CellToEl{2,Ti}
 const NodeToEl{Ti} = CellToEl{1,Ti}
+
+"""
+Pretty much a sparse matrix csc.
+"""
+struct SparseCellToElementMap{N,Ti}
+    offset::Vector{Ti}
+    cells::Vector{NTuple{N,Ti}}
+    values::Vector{ElementId{Ti}}
+end
 
 @propagate_inbounds getindex(f::CellToEl, i) = f.nodes[i]
 @inline (==)(a::CellToEl, b::CellToEl) = a.nodes == b.nodes
@@ -43,7 +52,7 @@ function node_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     radix_sort!(node_list, total_nodes, 1)
     remove_singletons!(node_list)
 
-    node_list
+    return compress(node_list)
 end
 
 function edge_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
@@ -64,7 +73,7 @@ function edge_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     radix_sort!(edge_list, total_nodes, 2)
     remove_singletons!(edge_list)
 
-    edge_list
+    return compress(edge_list)
 end
 
 function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
@@ -81,40 +90,42 @@ function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
 
     radix_sort!(face_list, total_nodes, 3)
     remove_singletons!(face_list)
-
-    face_list
+    return compress(face_list)
 end
 
-"""
-Remove non-repeated elements from an array
-"""
-function remove_singletons!(v::Vector)
-    length(v) == 0 && return v
-
-    count = 0
-    slow, fast = 1, 1
-
-    @inbounds while true
-        value = v[fast]
-        count = 0
-
-        # Copy them over while equal
-        while fast ≤ length(v) && v[fast] == value
-            v[slow] = v[fast]
-            slow += 1
-            fast += 1
-            count += 1
-        end
-
-        # If it occurs only once, we may overwrite it
-        if count == 1
-            slow -= 1
-        end
-
-        if fast > length(v)
-            break
+function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
+    # Count unique guys.
+    unique = 1
+    @inbounds for i = 1 : length(v) - 1
+        if v[i] != v[i + 1]
+            unique += 1
         end
     end
 
-    resize!(v, slow - 1)
+    @inbounds if v[end] != v[end-1]
+        unique += 1
+    end
+
+    offset = Vector{Ti}(unique + 1)
+    values = Vector{ElementId{Ti}}(length(v))
+    cells = Vector{NTuple{N,Ti}}(unique)
+
+    @inbounds begin
+        offset[1] = 1
+        values[1] = v[1].data
+        cells[1] = v[1].nodes
+        offset[end] = length(v) + 1
+        offset_idx = 1
+
+        for i = 2 : length(v)
+            values[i] = v[i].data
+            if v[i] != v[i - 1]
+                offset_idx += 1
+                offset[offset_idx] = i
+                cells[offset_idx] = v[i].nodes
+            end
+        end
+    end
+
+    return SparseCellToElementMap(offset, cells, values)
 end
