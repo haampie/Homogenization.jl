@@ -152,3 +152,38 @@ function remove_singletons!(v::Vector)
 
     resize!(v, slow - 1)
 end
+
+"""
+Given a sorted array lhs and a sorted array rhs, remove all items in rhs from
+lhs, modifying lhs in-place.
+"""
+function left_minus_right!(lhs::Vector, rhs::Vector)
+    slow = 1
+    fast = 1
+    idx = 1
+
+    @inbounds while fast ≤ length(lhs) && idx ≤ length(rhs)
+        if lhs[fast] < rhs[idx]
+            # Copy stuff while smaller
+            lhs[slow] = lhs[fast]
+            slow += 1
+            fast += 1
+        elseif lhs[fast] == rhs[idx]
+            # If equal we should not copy (so slow stays put)
+            fast += 1
+            idx += 1
+        else
+            # Otherwise lhs[fast] > rhs[idx], so we should increment idx
+            idx += 1
+        end
+    end
+
+    # Copy the tail of lhs.
+    @inbounds while fast ≤ length(lhs)
+        lhs[slow] = lhs[fast]
+        slow += 1
+        fast += 1
+    end
+
+    resize!(lhs, slow - 1)
+end

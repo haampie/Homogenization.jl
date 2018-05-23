@@ -25,7 +25,7 @@ function refine_uniformly(mesh::Tets{Tv,Ti}, graph::SparseGraph) where {Tv,Ti}
     parts = Vector{Ti}(10)
 
     tet_idx = 1
-    offset = UInt32(Nn)
+    offset = Ti(Nn)
     @inbounds for tet in mesh.elements
 
         # Collect the nodes

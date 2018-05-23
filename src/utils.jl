@@ -15,5 +15,5 @@ function WriteVTK.vtk_grid(filename::AbstractString, mesh::Mesh{dim,N,Tv}) where
     celltype = cell_to_vtk(mesh)
     cells = [MeshCell(celltype, SVector(element)) for element in mesh.elements]
     coords = reinterpret(Tv, mesh.nodes, (dim, length(mesh.nodes)))
-    return vtk_grid(filename, coords, cells)
+    return vtk_grid(filename, coords, cells, compress = 1)
 end
