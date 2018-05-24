@@ -75,24 +75,6 @@ end
 
 radix_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer} = radix_sort!(v, max, N)
 
-function remove_duplicates!(vec::Vector)
-    n = length(vec)
-
-    # Can only be unique
-    n ≤ 1 && return vec
-
-    # Discard repeated entries
-    slow = 1
-    @inbounds for fast = 2 : n
-        vec[slow] == vec[fast] && continue
-        slow += 1
-        vec[slow] = vec[fast]
-    end
-
-    # Return the resized vector with unique elements
-    return resize!(vec, slow)
-end
-
 
 """
     binary_search(v, x, lo, hi)
@@ -122,6 +104,24 @@ function sort_edges!(g::SparseGraph)
     end
 
     return g
+end
+
+function remove_duplicates!(vec::Vector)
+    n = length(vec)
+
+    # Can only be unique
+    n ≤ 1 && return vec
+
+    # Discard repeated entries
+    slow = 1
+    @inbounds for fast = 2 : n
+        vec[slow] == vec[fast] && continue
+        slow += 1
+        vec[slow] = vec[fast]
+    end
+
+    # Return the resized vector with unique elements
+    return resize!(vec, slow)
 end
 
 """
@@ -186,4 +186,63 @@ function left_minus_right!(lhs::Vector, rhs::Vector)
     end
 
     resize!(lhs, slow - 1)
+end
+
+"""
+    complement(sorted_vec, n)
+
+Returns a sorted vector of the numbers 1:n \ sorted_vec. Useful to identify
+the interior nodes if the boundary nodes are known.
+"""
+function complement(nodes::Vector{Ti}, n::Integer) where {Ti}
+    complement = Vector{Ti}(n - length(nodes))
+    num = 1
+    idx = 1
+
+    @inbounds for i in nodes
+        while num < i
+            complement[idx] = num
+            num += 1
+            idx += 1
+        end
+        num += 1
+    end
+
+    @inbounds for i = num : n
+        complement[idx] = i
+        idx += 1
+    end
+
+    return complement
+end
+
+"""
+Remove all repeated pairs of values in a vector
+"""
+function remove_repeated_pairs!(v::Vector)
+    n = length(v)
+
+    # Can only be unique
+    n ≤ 1 && return v
+
+    # Discard repeated entries
+    slow = 1
+    fast = 1
+    @inbounds while fast < n
+        # Found a pair, skip over it.
+        if v[fast] != v[fast + 1]
+            v[slow] = v[fast]
+            fast += 1
+            slow += 1
+        else
+            fast += 2
+        end
+    end
+
+    @inbounds if fast == n
+        v[slow] = v[fast]
+        slow += 1
+    end
+
+    return resize!(v, slow - 1)
 end

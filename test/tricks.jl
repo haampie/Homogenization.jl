@@ -1,5 +1,5 @@
 using Base.Test
-using Rewrite: remove_duplicates!, remove_singletons!, left_minus_right!
+using Rewrite: remove_duplicates!, remove_singletons!, left_minus_right!, remove_repeated_pairs!
 
 @testset "Remove duplicates from sorted vector" begin
     @test remove_duplicates!([]) == []
@@ -23,4 +23,13 @@ end
     @test left_minus_right!([1,2,3],[4,5,6]) == [1,2,3]
     @test left_minus_right!([1,3,6,9],[3,9]) == [1,6]
     @test left_minus_right!([1,2,3,4],[1,2,3,4]) == []
+end
+
+@testset "Remove repeated pairs array" begin
+    @test remove_repeated_pairs!([]) == []
+    @test remove_repeated_pairs!([1]) == [1]
+    @test remove_repeated_pairs!([1,1]) == []
+    @test remove_repeated_pairs!([1,1,2]) == [2]
+    @test remove_repeated_pairs!([1,1,2,3,3,4]) == [2,4]
+    @test remove_repeated_pairs!([1,1,2,3,3,4,4]) == [2]
 end

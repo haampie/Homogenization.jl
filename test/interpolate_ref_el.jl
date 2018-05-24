@@ -1,138 +1,10 @@
 using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map, 
                refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
                nodes_on_ref_edges, navigation, face_to_elements, edge_to_elements,
-               nelements, nnodes, nodes_per_face, nodes_per_edge, get_reference_normals,
-               Tet, node_to_elements
+               nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
+               get_reference_normals, Tet, node_to_elements
 using StaticArrays
 using WriteVTK
-
-"""
-We refine a reference triangle a bunch of times, construct a coarse base mesh,
-generate some random numbers for the nodes on the base mesh, and then interpolate
-these to the fine grid. Finally we construct the full fine grid with nodes on the
-interfaces repeated, to see if the interfaces match.
-"""
-function interpolate_ref_elements()
-    # Make a base mesh
-    base_nodes = SVector{2,Float64}[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (2.0, 1.0)]
-    base_elements = [(1,2,4),(2,3,4),(3,4,5)]
-    base = Mesh(base_nodes, base_elements)
-    for i = 1 : 0
-        base = refine_uniformly(base, edge_graph(base))
-    end
-    
-    for i = 1 : length(base.nodes)
-        base.nodes[i] += SVector(randn()/100, randn()/100)
-    end
-
-    @assert all(issorted, base.elements)
-
-    # Refine a reference tri
-    ref = refined_element(5, Tris64)
-
-    total_fine_nodes = length(ref.levels[end].nodes)
-
-    fine_nodes = SVector{2,Float64}[]
-    fine_elements = NTuple{3,Int}[]
-
-    # Generate some random values that will be interpolated to the fine grid.
-    u_coarse = linspace(0, 1, length(base.nodes))
-
-    # This will hold the interpolated values with local numbering per base element.
-    u_fine = zeros(total_fine_nodes, length(base.elements))
-
-    for (i, element) in enumerate(base.elements)
-        # coord transform J * x + b
-        J, b = affine_map(base, element)
-
-        # Get the u values and interpolate them.
-        us = [u_coarse[i] for i in element]
-        for P = ref.interops
-            us = P * us
-        end
-
-        u_fine[:, i] .= us
-
-        # Push all the fine nodes & elements
-        new_nodes = [J * x + b for x in ref.levels[end].nodes]
-        new_elements = [el .+ total_fine_nodes * (i-1) for el in ref.levels[end].elements]
-        
-        append!(fine_elements, new_elements)        
-        append!(fine_nodes, new_nodes)
-    end
-
-    # Construct the full mesh now.
-    fine = Mesh(fine_nodes, fine_elements)
-
-    vtk_grid("interpolation_stuff", fine) do vtk
-        vtk_point_data(vtk, u_fine[:], "u")
-    end
-end
-
-"""
-We refine a reference tetrahedron a bunch of times, construct a coarse base mesh,
-generate some random numbers for the nodes on the base mesh, and then interpolate
-these to the fine grid. Finally we construct the full fine grid with nodes on the
-interfaces repeated, to see if the interfaces match.
-"""
-function interpolate_ref_elements_tet()
-    # Make a base mesh
-    base_nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(0,0,1)]
-    base_elements = [(1,2,3,4)]
-    base = Mesh(base_nodes, base_elements)
-    for i = 1 : 2
-        base = refine_uniformly(base, edge_graph(base))
-    end
-    
-    for i = 1 : length(base.nodes)
-        base.nodes[i] += SVector(randn()/100, randn()/100, randn()/100)
-    end
-
-    sort_element_nodes!(base.elements)
-
-    @assert all(issorted, base.elements)
-
-    # Refine a reference tri
-    ref = refined_element(5, Tets64)
-
-    total_fine_nodes = length(ref.levels[end].nodes)
-
-    fine_nodes = SVector{3,Float64}[]
-    fine_elements = NTuple{4,Int}[]
-
-    # Generate some random values that will be interpolated to the fine grid.
-    u_coarse = linspace(0, 1, length(base.nodes))
-
-    # This will hold the interpolated values with local numbering per base element.
-    u_fine = zeros(total_fine_nodes, length(base.elements))
-
-    for (i, element) in enumerate(base.elements)
-        # coord transform J * x + b
-        J, b = affine_map(base, element)
-
-        # Get the u values and interpolate them.
-        us = [u_coarse[i] for i in element]
-        for P = ref.interops
-            us = P * us
-        end
-
-        u_fine[:, i] .= us
-
-        # Push all the fine nodes & elements
-        new_nodes = [J * x + b for x in ref.levels[end].nodes]
-        new_elements = [el .+ total_fine_nodes * (i-1) for el in ref.levels[end].elements]
-        
-        append!(fine_elements, new_elements)        
-        append!(fine_nodes, new_nodes)
-    end
-
-    # Construct the full mesh now.
-    fine = Mesh(fine_nodes, fine_elements)
-
-    vtk_grid("interpolation_stuff_tet", fine) do vtk
-        vtk_point_data(vtk, u_fine[:], "u")
-    end
-end
 
 function see_whether_faces_edges_nodes_connect_at_interfaces(refinements = 3, gap = 1.0)
     # Make a base mesh
@@ -209,12 +81,12 @@ function see_whether_faces_edges_nodes_connect_at_interfaces(refinements = 3, ga
         @inbounds for (i, face) in enumerate(face_to_element.cells)
 
             # Generate some random numbers
-            u1 = randn(nodes_per_face(ref, refinements))
+            u1 = randn(nodes_per_face_interior(ref, refinements))
 
             # Loop over the elements
             for j = face_to_element.offset[i] : face_to_element.offset[i+1]-1
                 element_id = face_to_element.values[j]
-                nodes = numbering.faces[element_id.local_id]
+                nodes = numbering.faces_interior[element_id.local_id]
                 u_faces[nodes, element_id.element] .= u1
             end
         end
@@ -223,12 +95,12 @@ function see_whether_faces_edges_nodes_connect_at_interfaces(refinements = 3, ga
         @inbounds for (i, edge) in enumerate(edge_to_element.cells)
 
             # Generate some random numbers
-            u2 = randn(nodes_per_edge(ref, refinements))
+            u2 = randn(nodes_per_edge_interior(ref, refinements))
 
             # Loop over the elements
             for j = edge_to_element.offset[i] : edge_to_element.offset[i+1]-1
                 element_id = edge_to_element.values[j]
-                nodes = numbering.edges[element_id.local_id]
+                nodes = numbering.edges_interior[element_id.local_id]
                 u_edges[nodes, element_id.element] .= u2
             end
         end

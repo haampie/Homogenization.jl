@@ -18,7 +18,9 @@ and nodes of a refined reference element.
 """
 struct ReferenceNumbering{Ti}
     faces::Vector{Vector{Ti}}
+    faces_interior::Vector{Vector{Ti}}
     edges::Vector{Vector{Ti}}
+    edges_interior::Vector{Vector{Ti}}
     nodes::Vector{Ti}
 end
 
@@ -82,7 +84,7 @@ end
 @inline function (n::IsOnEdge{N,Tv})(x::SVector{N,Tv}) where {N,Tv}
     vec = x - n.origin
     proj = dot(n.unit, vec)
-    abs(proj * proj - dot(vec, vec)) < 1e-7
+    abs(proj * proj - dot(vec, vec)) < 1e-7 # todo, fix this.
 end
 
 function nodes_on_ref_edges(m::Tets{Tv,Ti}) where {Tv,Ti}
@@ -103,8 +105,8 @@ end
 """
     get_local_numbering(mesh::Tets) -> ReferenceNumbering
 
-Get the indices of the nodes in the interior of the faces, the interior of the
-edges and the corner points.
+Get the indices of the nodes in (the interior of) the faces, the edges and the 
+corner points.
 """
 function get_local_numbering(m::Tets{Tv}) where {Tv}
     # First collect the nodes on all four faces.
@@ -129,41 +131,64 @@ function get_local_numbering(m::Tets{Tv}) where {Tv}
     # Finally find the nodes in the corners (well...)
     nodes_to_nodes = collect(1:4)
 
+    interior_face_to_nodes = deepcopy(face_to_nodes)
+    interior_edge_to_nodes = deepcopy(edge_to_nodes)
+
     # Now remove the boundaries from the faces and the endpoints from the edges.
-    left_minus_right!(face_to_nodes[1], edge_to_nodes[1]) # 1→2
-    left_minus_right!(face_to_nodes[1], edge_to_nodes[2]) # 1→3
-    left_minus_right!(face_to_nodes[1], edge_to_nodes[4]) # 2→3
+    left_minus_right!(interior_face_to_nodes[1], edge_to_nodes[1]) # 1→2
+    left_minus_right!(interior_face_to_nodes[1], edge_to_nodes[2]) # 1→3
+    left_minus_right!(interior_face_to_nodes[1], edge_to_nodes[4]) # 2→3
 
-    left_minus_right!(face_to_nodes[2], edge_to_nodes[1]) # 1→2
-    left_minus_right!(face_to_nodes[2], edge_to_nodes[3]) # 1→4
-    left_minus_right!(face_to_nodes[2], edge_to_nodes[5]) # 2→4
+    left_minus_right!(interior_face_to_nodes[2], edge_to_nodes[1]) # 1→2
+    left_minus_right!(interior_face_to_nodes[2], edge_to_nodes[3]) # 1→4
+    left_minus_right!(interior_face_to_nodes[2], edge_to_nodes[5]) # 2→4
 
-    left_minus_right!(face_to_nodes[3], edge_to_nodes[2]) # 1→3
-    left_minus_right!(face_to_nodes[3], edge_to_nodes[3]) # 1→4
-    left_minus_right!(face_to_nodes[3], edge_to_nodes[6]) # 3→4
+    left_minus_right!(interior_face_to_nodes[3], edge_to_nodes[2]) # 1→3
+    left_minus_right!(interior_face_to_nodes[3], edge_to_nodes[3]) # 1→4
+    left_minus_right!(interior_face_to_nodes[3], edge_to_nodes[6]) # 3→4
 
-    left_minus_right!(face_to_nodes[4], edge_to_nodes[4]) # 2→3
-    left_minus_right!(face_to_nodes[4], edge_to_nodes[5]) # 2→4
-    left_minus_right!(face_to_nodes[4], edge_to_nodes[6]) # 3→4
+    left_minus_right!(interior_face_to_nodes[4], edge_to_nodes[4]) # 2→3
+    left_minus_right!(interior_face_to_nodes[4], edge_to_nodes[5]) # 2→4
+    left_minus_right!(interior_face_to_nodes[4], edge_to_nodes[6]) # 3→4
 
     # Remove the end points from the edges
     for i = 1 : 6
-        left_minus_right!(edge_to_nodes[i], nodes_to_nodes)
+        left_minus_right!(interior_edge_to_nodes[i], nodes_to_nodes)
     end
 
-    return ReferenceNumbering(face_to_nodes, edge_to_nodes, nodes_to_nodes)
+    return ReferenceNumbering(
+        face_to_nodes,
+        interior_face_to_nodes,
+        edge_to_nodes,
+        interior_edge_to_nodes,
+        nodes_to_nodes
+    )
 end
 
 """
-    nodes_per_face(::MultilevelReference, refinements)
+    nodes_per_face(::MultilevelReference, level)
 
-Return the number of nodes on the faces at refinement level `refinements`
+Return the number of nodes on the faces at refinement level `level`
 """
-@propagate_inbounds nodes_per_face(ref::MultilevelReference, refinements::Int) = length(ref.numbering[refinements].faces[1])
+@propagate_inbounds nodes_per_face(ref::MultilevelReference, level::Int) = length(ref.numbering[level].faces[1])
 
 """
-    nodes_per_edge(::MultilevelReference, refinements)
+    nodes_per_face_interior(::MultilevelReference, level)
 
-Return the number of nodes on the edges at refinement level `refinements`
+Return the number of nodes on the interior of the faces at refinement level `level`
 """
-@propagate_inbounds nodes_per_edge(ref::MultilevelReference, refinements::Int) = length(ref.numbering[refinements].edges[1])
+@propagate_inbounds nodes_per_face_interior(ref::MultilevelReference, level::Int) = length(ref.numbering[level].faces_interior[1])
+
+"""
+    nodes_per_edge(::MultilevelReference, level)
+
+Return the number of nodes on the edges at refinement level `level`
+"""
+@propagate_inbounds nodes_per_edge(ref::MultilevelReference, level::Int) = length(ref.numbering[level].edges[1])
+
+"""
+    nodes_per_edge_interior(::MultilevelReference, level)
+
+Return the number of nodes on the interior of the edges at refinement level `level`
+"""
+@propagate_inbounds nodes_per_edge_interior(ref::MultilevelReference, level::Int) = length(ref.numbering[level].edges_interior[1])
