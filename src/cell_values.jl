@@ -143,6 +143,11 @@ Get the values of basis function `idx` in quad poin `qp`
 @propagate_inbounds get_value(c::ElementValues, qp::Int, idx::Int) = c.values[qp][idx]
 
 """
+Get inv(J')
+"""
+@propagate_inbounds get_inv_jac(c::ElementValues) = c.inv_jacobian
+
+"""
 Get the |J|, the absolute value of the determinant of the affine map
 """
 @propagate_inbounds get_detjac(c::ElementValues) = c.det_jacobian.value

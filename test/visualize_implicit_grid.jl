@@ -149,7 +149,7 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
         (1,1,1)
     ]
     
-    # Five tetrahedra
+    # Split in tetrahedra
     elements = [
         (1,2,3,5),
         (2,3,4,8),
@@ -182,11 +182,11 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
     # Apply zero Dirichlet boundary conditions.
     apply_dirichlet_constraint!(u, store_level, constraint, implicit)
 
-    # Construct the full grid (expensive)
+    # Construct the full grid (expensive if `store_level` is large)
     fine_mesh = construct_full_grid(implicit, store_level)
 
     # Save the full grid
-    vtk = vtk_grid("level_3", fine_mesh) do vtk
+    vtk = vtk_grid("single_level", fine_mesh) do vtk
         vtk_point_data(vtk, u, "u")
     end
 end
