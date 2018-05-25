@@ -7,7 +7,7 @@ function poisson()
     elements = [(1,2,3,4)]
     # nodes = SVector{2,Float64}[(0,0), (1,0), (0,1)]
     # elements = [(1,2,3)]
-    mesh = refine_uniformly(Mesh(nodes,elements), times = 8)
+    mesh = refine_uniformly(Mesh(nodes,elements), times = 7)
 
     @show nnodes(mesh) nelements(mesh)
 
@@ -15,6 +15,7 @@ function poisson()
 
     println("Assembling")
     A, b = assemble_matrix_and_rhs(mesh)
+    @profile assemble_matrix_and_rhs(mesh)
 
     x = zeros(nnodes(mesh))
     # x[interior] .= 1.0

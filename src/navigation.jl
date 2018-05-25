@@ -78,6 +78,19 @@ end
 
 function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     total_nodes = length(mesh.nodes)
+    face_list = list_faces_with_element(list_faces_with_element)
+    radix_sort!(face_list, total_nodes, 3)
+    remove_singletons!(face_list)
+    return compress(face_list)
+end
+
+"""
+    list_faces_with_element(mesh) -> Vector{CellToEl}
+
+Make a list of all faces with their corresponding element id and their local
+face number.
+"""
+function list_faces_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     face_list = Vector{FaceToEl{Ti}}(4 * length(mesh.elements))
     idx = 1
     @inbounds for (el_idx, el) in enumerate(mesh.elements)
@@ -87,10 +100,7 @@ function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
         face_list[idx + 3] = FaceToEl{Ti}((el[2], el[3], el[4]), ElementId(el_idx, 4))
         idx += 4
     end
-
-    radix_sort!(face_list, total_nodes, 3)
-    remove_singletons!(face_list)
-    return compress(face_list)
+    return face_list
 end
 
 function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}

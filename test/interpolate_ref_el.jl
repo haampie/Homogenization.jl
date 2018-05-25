@@ -2,7 +2,9 @@ using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map,
                refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
                nodes_on_ref_edges, navigation, face_to_elements, edge_to_elements,
                nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
-               get_reference_normals, Tet, node_to_elements
+               get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
+               construct_full_grid, ZeroDirichletConstraint, list_boundary_faces,
+               refined_mesh, apply_dirichlet_constraint!
 using StaticArrays
 using WriteVTK
 
@@ -131,5 +133,60 @@ function see_whether_faces_edges_nodes_connect_at_interfaces(refinements = 3, ga
                 vtk_point_data(vtk, u_nodes, "nodes")
             end
         end
+    end
+end
+
+function extract_full_fine_grid(total_levels = 6, store_level = 3)
+    # Unit cube
+    nodes = SVector{3,Float64}[
+        (0,0,0),
+        (1,0,0),
+        (0,1,0),
+        (1,1,0),
+        (0,0,1),
+        (1,0,1),
+        (0,1,1),
+        (1,1,1)
+    ]
+    
+    # Five tetrahedra
+    elements = [
+        (1,2,3,5),
+        (2,3,4,8),
+        (3,5,7,8),
+        (2,5,6,8),
+        (2,3,5,8)
+    ]
+
+    base = Mesh(nodes, elements)
+
+    # We apply a zero Dirichlet b.c. to all boundary faces.
+    constraint = ZeroDirichletConstraint(list_boundary_faces(base))
+    
+    # Implicitly refine things.
+    implicit = ImplicitFineGrid(base, total_levels)
+
+    # Shows some info about number of nodes
+    println(implicit)
+
+    # Find the number of nodes per element at level `store_level`
+    nodes_per_element = nnodes(refined_mesh(implicit, store_level))
+
+    # Fill each element with a unique value
+    u = Matrix{Float64}(nodes_per_element, nelements(base))
+
+    for el = 1 : nelements(base)
+        u[:, el] .= float(el)
+    end
+
+    # Apply zero Dirichlet boundary conditions.
+    apply_dirichlet_constraint!(u, store_level, constraint, implicit)
+
+    # Construct the full grid (expensive)
+    fine_mesh = construct_full_grid(implicit, store_level)
+
+    # Save the full grid
+    vtk = vtk_grid("level_3", fine_mesh) do vtk
+        vtk_point_data(vtk, u, "u")
     end
 end

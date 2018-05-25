@@ -2,6 +2,8 @@ module Rewrite
 
 using StaticArrays, WriteVTK
 
+export Mesh, refine_uniformly
+
 include("grid.jl")
 
 include("sparse_graph.jl")
@@ -19,5 +21,6 @@ include("cell_values.jl")
 include("multilevel_reference.jl")
 include("navigation.jl")
 include("assembly.jl")
+include("implicit_fine_grid.jl")
 
 end

@@ -5,7 +5,7 @@ function assemble_matrix_and_rhs(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     cell = cell_type(mesh)
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
-    element_values = ElementValues(cell, quadrature, update_gradients | update_inv_J | update_J | update_det_J)
+    element_values = ElementValues(cell, quadrature, update_gradients | update_det_J)
 
     Nt = nelements(mesh)
     Nn = nnodes(mesh)
