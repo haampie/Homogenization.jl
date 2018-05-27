@@ -26,14 +26,25 @@ struct SparseCellToElementMap{N,Ti}
     values::Vector{ElementId{Ti}}
 end
 
+struct Interfaces{Nn,Ne,Nf,Ti}
+    nodes::SparseCellToElementMap{Nn,Ti}
+    edges::SparseCellToElementMap{Ne,Ti}
+    faces::SparseCellToElementMap{Nf,Ti}
+end
+
 @propagate_inbounds getindex(f::CellToEl, i) = f.nodes[i]
 @inline (==)(a::CellToEl, b::CellToEl) = a.nodes == b.nodes
 
-function navigation(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+function interfaces(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     # First order the element nodes.
-    sort_element_nodes!(mesh.elements)
+    @assert all(issorted, mesh.elements)
+    # sort_element_nodes!(mesh.elements)
 
-    node_to_elements(mesh), edge_to_elements(mesh), face_to_elements(mesh)
+    Interfaces(
+        node_to_elements(mesh),
+        edge_to_elements(mesh),
+        face_to_elements(mesh)
+    )
 end
 
 function node_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
@@ -78,7 +89,7 @@ end
 
 function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     total_nodes = length(mesh.nodes)
-    face_list = list_faces_with_element(list_faces_with_element)
+    face_list = list_faces_with_element(mesh)
     radix_sort!(face_list, total_nodes, 3)
     remove_singletons!(face_list)
     return compress(face_list)

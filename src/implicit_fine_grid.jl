@@ -1,16 +1,19 @@
 import Base: @propagate_inbounds, show
 """
-ImplicitFineGrid holds the base mesh and the refinements of the reference element
+ImplicitFineGrid holds the base mesh, the refinements of the reference element and the
+interfaces on the base mesh.
 """
-struct ImplicitFineGrid{dim,N,Tv,Ti}
+struct ImplicitFineGrid{dim,N,Tv,Ti,Nn,Ne,Nf}
     levels::Int
     reference::MultilevelReference{dim,N,Tv,Ti}
+    interfaces::Interfaces{Nn,Ne,Nf,Ti}
     base::Mesh{dim,N,Tv,Ti}
 end
 
 function ImplicitFineGrid(base::Mesh{dim,N,Tv,Ti}, levels::Int) where {dim,N,Tv,Ti}
     reference = refined_element(levels, typeof(base))
-    ImplicitFineGrid(levels, reference, base)
+    inter = interfaces(base)
+    ImplicitFineGrid(levels, reference, inter, base)
 end
 
 nlevels(g::ImplicitFineGrid) = g.levels
