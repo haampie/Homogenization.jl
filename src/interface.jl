@@ -1,24 +1,32 @@
 import Base: getindex, @propagate_inbounds, ==, show
 
 """
-Reference to global element id with local node / edge / face number.
+Reference to global element index with local node / edge / face number.
 """
 struct ElementId{Ti}
     element::Ti
     local_id::Ti
 end
 
+"""
+Wraps a cell (set of nodes, either a node, an edge or a face) and metadata (element index & 
+local index.)
+"""
 struct CellToEl{N,Ti}
     nodes::NTuple{N,Ti}
     data::ElementId{Ti}
 end
 
+# This is a bit of sugar.
 const FaceToEl{Ti} = CellToEl{3,Ti}
 const EdgeToEl{Ti} = CellToEl{2,Ti}
 const NodeToEl{Ti} = CellToEl{1,Ti}
 
 """
-Pretty much a sparse matrix csc.
+Pretty much a sparse matrix csc. `cells` is a vector of cells (either a node, an edge or a
+face). The range `offset[i] : offset[i+1]-1` is a list of indices of `values`, which contains
+the corresponding element indices and local cell number. So `values[offset[2] : offset[3] - 1]`
+would return the elements that `cells[2]` belongs to.
 """
 struct SparseCellToElementMap{N,Ti}
     offset::Vector{Ti}
@@ -57,7 +65,7 @@ end
 """
     node_to_elements(mesh) -> SparseCellToElementMap
 
-Returns two sparse maps from face -> node with local face id's. The first has all nodes,
+Returns two sparse maps from face -> node with local face index. The first has all nodes,
 the second only has nodes that are on the interface between elements.
 """
 function node_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
@@ -71,7 +79,7 @@ end
 """
     edge_to_elements(mesh) -> SparseCellToElementMap
 
-Returns a sparse map from edge -> element with local edge id's, where the edges lie on the
+Returns a sparse map from edge -> element with local edge index, where the edges lie on the
 interface between elements.
 """
 function edge_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
@@ -84,7 +92,7 @@ end
 """
     face_to_elements(mesh) -> SparseCellToElementMap
 
-Returns a sparse map from face -> element with local face id's, where the faces lie on the
+Returns a sparse map from face -> element with local face index, where the faces lie on the
 interface between elements.
 """
 function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
@@ -97,8 +105,7 @@ end
 """
     list_faces_with_element(mesh) -> Vector{CellToEl}
 
-Make a list of all faces with their corresponding element id and their local
-face number.
+Make a list of all faces with their corresponding element index and their local face number.
 """
 function list_faces_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     face_list = Vector{FaceToEl{Ti}}(4 * nelements(mesh))
@@ -116,8 +123,7 @@ end
 """
     list_edges_with_element(mesh) -> Vector{CellToEl}
 
-Make a list of all edges with their corresponding element id and their local
-edge number.
+Make a list of all edges with their corresponding element index and their local edge number.
 """
 function list_edges_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     edge_list = Vector{EdgeToEl{Ti}}(6 * nelements(mesh))
@@ -137,8 +143,7 @@ end
 """
     list_nodes_with_element(mesh) -> Vector{CellToEl}
 
-Make a list of all nodes with their corresponding element id and their local
-node number.
+Make a list of all nodes with their corresponding element index and their local node number.
 """
 function list_nodes_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     node_list = Vector{NodeToEl{Ti}}(4 * nelements(mesh))
@@ -185,6 +190,9 @@ function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
 
         for i = 2 : length(v)
             values[i] = v[i].data
+
+            # If we find a new cell, update the bookkeeping of offset pointers, and update
+            # the value.
             if v[i] != v[i - 1]
                 offset_idx += 1
                 offset[offset_idx] = i
