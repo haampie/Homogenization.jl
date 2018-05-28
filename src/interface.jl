@@ -1,7 +1,7 @@
-import Base: getindex, @propagate_inbounds, ==, !=, show
+import Base: getindex, @propagate_inbounds, ==, show
 
 """
-Reference to global element id with local node / edge/ face number.
+Reference to global element id with local node / edge / face number.
 """
 struct ElementId{Ti}
     element::Ti
@@ -54,53 +54,42 @@ function interfaces(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     Interfaces(all_nodes, nodes, edges, faces)
 end
 
+"""
+    node_to_elements(mesh) -> SparseCellToElementMap
+
+Returns two sparse maps from face -> node with local face id's. The first has all nodes,
+the second only has nodes that are on the interface between elements.
+"""
 function node_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
-    total_nodes = length(mesh.nodes)
-    node_list = Vector{NodeToEl{Ti}}(4 * length(mesh.elements))
-
-    idx = 1
-    @inbounds for (el_idx, el) in enumerate(mesh.elements)
-        node_list[idx + 0] = NodeToEl{Ti}((el[1],), ElementId(el_idx, 1))
-        node_list[idx + 1] = NodeToEl{Ti}((el[2],), ElementId(el_idx, 2))
-        node_list[idx + 2] = NodeToEl{Ti}((el[3],), ElementId(el_idx, 3))
-        node_list[idx + 3] = NodeToEl{Ti}((el[4],), ElementId(el_idx, 4))
-        idx += 4
-    end
-
-    radix_sort!(node_list, total_nodes, 1)
-
+    node_list = list_nodes_with_element(mesh)
+    radix_sort!(node_list, nnodes(mesh), 1)
     all_nodes = copy(node_list)    
-    
     remove_singletons!(node_list)
-
     return compress(all_nodes), compress(node_list)
 end
 
+"""
+    edge_to_elements(mesh) -> SparseCellToElementMap
+
+Returns a sparse map from edge -> element with local edge id's, where the edges lie on the
+interface between elements.
+"""
 function edge_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
-    total_nodes = length(mesh.nodes)
-    edge_list = Vector{EdgeToEl{Ti}}(6 * length(mesh.elements))
-
-    idx = 1
-    @inbounds for (el_idx, el) in enumerate(mesh.elements)
-        edge_list[idx + 0] = EdgeToEl{Ti}((el[1], el[2]), ElementId(el_idx, 1))
-        edge_list[idx + 1] = EdgeToEl{Ti}((el[1], el[3]), ElementId(el_idx, 2))
-        edge_list[idx + 2] = EdgeToEl{Ti}((el[1], el[4]), ElementId(el_idx, 3))
-        edge_list[idx + 3] = EdgeToEl{Ti}((el[2], el[3]), ElementId(el_idx, 4))
-        edge_list[idx + 4] = EdgeToEl{Ti}((el[2], el[4]), ElementId(el_idx, 5))
-        edge_list[idx + 5] = EdgeToEl{Ti}((el[3], el[4]), ElementId(el_idx, 6))
-        idx += 6
-    end
-
-    radix_sort!(edge_list, total_nodes, 2)
+    edge_list = list_edges_with_element(mesh)
+    radix_sort!(edge_list, nnodes(mesh), 2)
     remove_singletons!(edge_list)
-
     return compress(edge_list)
 end
 
+"""
+    face_to_elements(mesh) -> SparseCellToElementMap
+
+Returns a sparse map from face -> element with local face id's, where the faces lie on the
+interface between elements.
+"""
 function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
-    total_nodes = length(mesh.nodes)
     face_list = list_faces_with_element(mesh)
-    radix_sort!(face_list, total_nodes, 3)
+    radix_sort!(face_list, nnodes(mesh), 3)
     remove_singletons!(face_list)
     return compress(face_list)
 end
@@ -112,7 +101,7 @@ Make a list of all faces with their corresponding element id and their local
 face number.
 """
 function list_faces_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
-    face_list = Vector{FaceToEl{Ti}}(4 * length(mesh.elements))
+    face_list = Vector{FaceToEl{Ti}}(4 * nelements(mesh))
     idx = 1
     @inbounds for (el_idx, el) in enumerate(mesh.elements)
         face_list[idx + 0] = FaceToEl{Ti}((el[1], el[2], el[3]), ElementId(el_idx, 1))
@@ -124,6 +113,52 @@ function list_faces_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     return face_list
 end
 
+"""
+    list_edges_with_element(mesh) -> Vector{CellToEl}
+
+Make a list of all edges with their corresponding element id and their local
+edge number.
+"""
+function list_edges_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+    edge_list = Vector{EdgeToEl{Ti}}(6 * nelements(mesh))
+    idx = 1
+    @inbounds for (el_idx, el) in enumerate(mesh.elements)
+        edge_list[idx + 0] = EdgeToEl{Ti}((el[1], el[2]), ElementId(el_idx, 1))
+        edge_list[idx + 1] = EdgeToEl{Ti}((el[1], el[3]), ElementId(el_idx, 2))
+        edge_list[idx + 2] = EdgeToEl{Ti}((el[1], el[4]), ElementId(el_idx, 3))
+        edge_list[idx + 3] = EdgeToEl{Ti}((el[2], el[3]), ElementId(el_idx, 4))
+        edge_list[idx + 4] = EdgeToEl{Ti}((el[2], el[4]), ElementId(el_idx, 5))
+        edge_list[idx + 5] = EdgeToEl{Ti}((el[3], el[4]), ElementId(el_idx, 6))
+        idx += 6
+    end
+    return edge_list
+end
+
+"""
+    list_nodes_with_element(mesh) -> Vector{CellToEl}
+
+Make a list of all nodes with their corresponding element id and their local
+node number.
+"""
+function list_nodes_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+    node_list = Vector{NodeToEl{Ti}}(4 * nelements(mesh))
+    idx = 1
+    @inbounds for (el_idx, el) in enumerate(mesh.elements)
+        node_list[idx + 0] = NodeToEl{Ti}((el[1],), ElementId(el_idx, 1))
+        node_list[idx + 1] = NodeToEl{Ti}((el[2],), ElementId(el_idx, 2))
+        node_list[idx + 2] = NodeToEl{Ti}((el[3],), ElementId(el_idx, 3))
+        node_list[idx + 3] = NodeToEl{Ti}((el[4],), ElementId(el_idx, 4))
+        idx += 4
+    end
+    return node_list
+end
+
+"""
+    compress(v::Vector{CellToEll{N,Ti}}) -> SparseCellToElementMap
+
+Compress a mapping from nodes, edges or faces to elements similar as what `sparse` does for
+a set of triplets.
+"""
 function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
     # Count unique guys.
     unique = 1
