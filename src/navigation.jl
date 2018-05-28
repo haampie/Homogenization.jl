@@ -40,7 +40,7 @@ struct Interfaces{Nn,Ne,Nf,Ti}
 end
 
 @propagate_inbounds getindex(f::CellToEl, i) = f.nodes[i]
-@inline (==)(a::CellToEl, b::CellToEl) = a.nodes == b.nodes
+@inline (==)(a::CellToEl, b::CellToEl) = a.nodes === b.nodes
 
 function interfaces(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     # First order the element nodes.
