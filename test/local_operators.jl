@@ -39,9 +39,6 @@ function local_operator(total_levels = 2, inspect_level = 2)
     # Operators for each level
     ops = build_local_operators(implicit.reference)
 
-    # Select the finest level ops.
-    ∫ϕₓᵢϕₓⱼ_finest = ops[inspect_level]
-
     # Verify things on this grid
     finest = refined_mesh(implicit, inspect_level)
     
@@ -64,7 +61,7 @@ function local_operator(total_levels = 2, inspect_level = 2)
     y_distributed = zeros(nodes_per_element, nelements(implicit.base))
 
     # Apply the operator on each base element
-    A_mul_B!(1.0, implicit.base, ∫ϕₓᵢϕₓⱼ_finest, x_distributed, 0.0, y_distributed)
+    A_mul_B!(1.0, implicit.base, ops[inspect_level], x_distributed, 0.0, y_distributed)
 
     # Accumulate the values along the interfaces and store them locally.
     broadcast_interfaces!(y_distributed, implicit, inspect_level)
