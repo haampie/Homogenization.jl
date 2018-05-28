@@ -14,7 +14,7 @@ end
 Construct a new state wrapper.
 """
 function LevelState(total_base_elements::Int, total_fine_nodes::Int, Tv::Type{<:Number})
-    x = Matrix{Tv}(total_fine_nodes, total_base_elements)
+    x = zeros(Tv, total_fine_nodes, total_base_elements)
     b = similar(x)
     r = similar(x)
     LevelState{Tv,typeof(x)}(x, b, r)
@@ -49,17 +49,23 @@ end
 Performs a single Richardson iteration
 """
 function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, curr::LevelState, k::Int)
-    # r ← b
-    copy!(curr.r, curr.b)
+    # r ← 0.0
+    fill!(curr.r, 0.0)
 
-    # r ← -Ax + r (= b - Ax)
-    A_mul_B!(-1.0, implicit.base, ops.A, curr.x, 1.0, curr.r)
+    # Apply the boundary condition.
+    apply_constraint!(curr.x, k, ops.bc, implicit)
 
-    # Accumulate the nodes on the interface and update their local values.
-    broadcast_interfaces!(curr.r, implicit, k)
+    # r ← -Ax
+    A_mul_B!(-1.0, implicit.base, ops.A, curr.x, curr.r)
 
     # Apply the boundary condition.
     apply_constraint!(curr.r, k, ops.bc, implicit)
+
+    # Accumulate the nodes on the interface and update their local values.
+    broadcast_interfaces!(curr.r, implicit, k)
+    
+    # r ← r + b = b - Ax
+    axpy!(1.0, curr.b, curr.r)
 
     # x ← ω * r + x
     axpy!(ω, curr.r, curr.x)
@@ -91,27 +97,32 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         P = implicit.reference.interops[k - 1]
 
         # Smooth
+        println("Level ", k, " now smoothing 5 times.")
         for i = 1 : 5
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            @show norm(curr.r)
+            @show vecnorm(curr.r)
         end
 
         # Restrict: bₖ₋₁ ← Pᵀrₖ
+        println("Restricting the residual")
+        apply_constraint!(curr.r, k, ops[k].bc, implicit)
         At_mul_B!(next.b, P, curr.r)
+        apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
+        broadcast_interfaces!(next.b, implicit, k - 1)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
+        println("Going to next level")
         vcycle!(implicit, base, ops, levels, ωs, k - 1)
 
-        # Interpolate: xₖ ← Pxₖ₋₁
+        # Interpolate: xₖ ← xₖ + Pxₖ₋₁: we basically us rₖ as a temporary.
+        println("Interpolating back.")
         A_mul_B!(1.0, P, next.x, 1.0, curr.x)
 
-        # Broadcast and boundary conditions.
-        broadcast_interfaces!(curr.x, implicit, k)
-        
         # Smooth
+        println("Level ", k, ": smoothing 5 more times.")
         for i = 1 : 5
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            @show norm(curr.r)
+            @show vecnorm(curr.r)
         end
     end
 

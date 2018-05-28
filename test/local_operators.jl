@@ -10,7 +10,7 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
                list_interior_nodes, assemble_matrix, BaseLevel
 
-function local_operator(total_levels = 2, inspect_level = 2)
+function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
     # Unit cube
     nodes = SVector{3,Float64}[
         (0,0,0),
@@ -60,10 +60,10 @@ function local_operator(total_levels = 2, inspect_level = 2)
     end
 
     # Output matrix is y.
-    y_distributed = zeros(nodes_per_element, nelements(implicit.base))
+    y_distributed = Matrix{Float64}(nodes_per_element, nelements(implicit.base))
 
-    # Apply the operator on each base element
-    A_mul_B!(1.0, implicit.base, ops[inspect_level], x_distributed, 0.0, y_distributed)
+    # Apply the operator on each base element (y ← A * x)
+    A_mul_B!(1.0, implicit.base, ops[inspect_level], x_distributed, y_distributed)
 
     # Accumulate the values along the interfaces and store them locally.
     broadcast_interfaces!(y_distributed, implicit, inspect_level)
@@ -79,7 +79,7 @@ function local_operator(total_levels = 2, inspect_level = 2)
     
 end
 
-function solve_things(total_levels = 5)
+function test_multigrid(total_levels = 5, store_level = 3)
     # Unit cube
     nodes = SVector{3,Float64}[
         (0,0,0),
@@ -93,7 +93,7 @@ function solve_things(total_levels = 5)
     ]
 
     # Perturb things a bit.
-    map!(x -> x .+ randn(3) / 50, nodes, nodes)
+    # map!(x -> x .+ randn(3) / 50, nodes, nodes)
     
     # Split in tetrahedra
     elements = [
@@ -115,6 +115,8 @@ function solve_things(total_levels = 5)
     # Build a multilevel grid
     implicit = ImplicitFineGrid(coarse_mesh, total_levels)
 
+    @assert all(issorted, implicit.base.elements)
+
     @show implicit
     
     # Dirichlet condition
@@ -134,16 +136,32 @@ function solve_things(total_levels = 5)
     # Set up the problem Ax = b.
     
     # x is initially random with values matching on the interfaces and 0 on the boundary
-    randn!(level_states[end].x)
+    rand!(level_states[end].x)
     broadcast_interfaces!(level_states[total_levels].x, implicit, total_levels)
     apply_constraint!(level_states[total_levels].x, total_levels, constraint, implicit)
 
     # b is just ones and matching on the interfaces.
-    fill!(level_states[end].b, 1.0)
+    h = 1 / 2^total_levels
+    fill!(level_states[end].b, h^2)
+    apply_constraint!(level_states[total_levels].b, total_levels, constraint, implicit)
 
-    ωs = fill(0.9, total_levels)
+    ωs = fill(1.1, total_levels)
 
     # Do a v-cycle :tada:
     vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels)
     
+    fine_mesh = construct_full_grid(implicit, store_level)
+
+
+    w = rand!(similar(level_states[store_level].x))
+    apply_constraint!(w, store_level, constraint, implicit)
+
+    # Save the full grid
+    vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
+        vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
+        vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
+        vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
+        vtk_point_data(vtk, reshape(w, :), "does it work")
+        vtk_cell_data(vtk, collect(1 : nelements(fine_mesh)), "elements")
+    end    
 end

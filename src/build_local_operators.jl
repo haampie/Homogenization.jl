@@ -77,20 +77,16 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
 end
 
 """
-    A_mul_B!(α, ::ImplicitFineGrid, ::∫ϕₓᵢϕₓⱼ, level, x, β, y)
+    A_mul_B!(α, ::ImplicitFineGrid, ::∫ϕₓᵢϕₓⱼ, level, x, y)
 
-Compute `y ← α * A * x + β * y` in a distributed fashion.
+Compute `y ← α * A * x` in a distributed fashion.
 """
-function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫ϕₓᵢϕₓⱼ, x::AbstractMatrix{Tv}, β::Tv, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫ϕₓᵢϕₓⱼ, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
     cell = cell_type(base)
-    quadrature = default_quad(cell)
-    element_values = ElementValues(cell, quadrature, update_det_J | update_inv_J)
+    
+    element_values = ElementValues(cell, default_quad(cell), update_det_J | update_inv_J)
 
-    if β == 0
-        fill!(y, zero(Tv))
-    elseif β != 1
-        scale!(y_local, β)
-    end
+    fill!(y, zero(Tv))
 
     @inbounds for (el_idx, element) in enumerate(base.elements)
         reinit!(element_values, base, element)
