@@ -1,3 +1,5 @@
+import Base.LinAlg: A_mul_B!
+
 struct ∫ϕₓᵢϕₓⱼ{dim,num,Tv,Ti}
     ops::SMatrix{dim,dim,SparseMatrixCSC{Tv,Ti},num}
 end
@@ -72,4 +74,38 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
 
     # Build the sparse matrix
     ∫ϕₓᵢϕₓⱼ(SMatrix{3,3,SparseMatrixCSC{Tv,Ti},9}(Tuple(dropzeros!(sparse(Is[i], Js[i], Vs[i], Nn, Nn)) for i = 1 : 9)))
+end
+
+"""
+    A_mul_B!(α, ::ImplicitFineGrid, ::∫ϕₓᵢϕₓⱼ, level, x, β, y)
+
+Compute `y ← α * A * x + β * y` in a distributed fashion.
+"""
+function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫ϕₓᵢϕₓⱼ, x::AbstractMatrix{Tv}, β::Tv, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+    cell = cell_type(base)
+    quadrature = default_quad(cell)
+    element_values = ElementValues(cell, quadrature, update_det_J | update_inv_J)
+
+    if β == 0
+        fill!(y, zero(Tv))
+    elseif β != 1
+        scale!(y_local, β)
+    end
+
+    @inbounds for (el_idx, element) in enumerate(base.elements)
+        reinit!(element_values, base, element)
+
+        Jinv = get_inv_jac(element_values)
+        detJ = get_detjac(element_values)
+
+        P = Jinv' * Jinv
+
+        x_local = view(x, :, el_idx)
+        y_local = view(y, :, el_idx)
+
+        # Apply the op finally.
+        for i = 1 : 3, j = 1 : 3
+            A_mul_B!(α * P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], x_local, 1.0, y_local)
+        end
+    end
 end

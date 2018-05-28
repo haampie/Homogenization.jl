@@ -26,7 +26,14 @@ struct SparseCellToElementMap{N,Ti}
     values::Vector{ElementId{Ti}}
 end
 
+"""
+The nodes, edges and faces members are sparse mappings from a node, edge or face
+on the interface to the corresponding element with the local index of the node,
+edge or face. We also store `all_nodes`, which includes the nodes that do not
+lie on an interface.
+"""
 struct Interfaces{Nn,Ne,Nf,Ti}
+    all_nodes::SparseCellToElementMap{Nn,Ti}
     nodes::SparseCellToElementMap{Nn,Ti}
     edges::SparseCellToElementMap{Ne,Ti}
     faces::SparseCellToElementMap{Nf,Ti}
@@ -40,11 +47,11 @@ function interfaces(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     @assert all(issorted, mesh.elements)
     # sort_element_nodes!(mesh.elements)
 
-    Interfaces(
-        node_to_elements(mesh),
-        edge_to_elements(mesh),
-        face_to_elements(mesh)
-    )
+    all_nodes, nodes = node_to_elements(mesh)
+    edges = edge_to_elements(mesh)
+    faces = face_to_elements(mesh)
+
+    Interfaces(all_nodes, nodes, edges, faces)
 end
 
 function node_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
@@ -61,9 +68,12 @@ function node_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     end
 
     radix_sort!(node_list, total_nodes, 1)
+
+    all_nodes = copy(node_list)    
+    
     remove_singletons!(node_list)
 
-    return compress(node_list)
+    return compress(all_nodes), compress(node_list)
 end
 
 function edge_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}

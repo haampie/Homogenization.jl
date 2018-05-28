@@ -4,8 +4,8 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
                get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
                construct_full_grid, ZeroDirichletConstraint, list_boundary_faces,
-               refined_mesh, apply_dirichlet_constraint!, cell_type, default_quad, ElementValues,
-               update_det_J, update_inv_J, reinit!, get_inv_jac, get_detjac
+               refined_mesh, apply_constraint!, cell_type, default_quad, ElementValues,
+               update_det_J, update_inv_J, reinit!, get_inv_jac, get_detjac, distribute!, broadcast_interfaces!
 using StaticArrays, WriteVTK
 
 function local_operator(total_levels = 2, inspect_level = 2)
@@ -21,7 +21,8 @@ function local_operator(total_levels = 2, inspect_level = 2)
         (1,1,1)
     ]
 
-    map!(x -> x .+ randn(3)/10, nodes, nodes)
+    # Perturb things a bit.
+    map!(x -> x .+ randn(3)/20, nodes, nodes)
     
     # Split in tetrahedra
     elements = [
@@ -32,10 +33,8 @@ function local_operator(total_levels = 2, inspect_level = 2)
         (2,3,5,8)
     ]
 
-    base = Mesh(nodes, elements)
-
     # Build a multilevel grid
-    implicit = ImplicitFineGrid(base, total_levels)
+    implicit = ImplicitFineGrid(Mesh(nodes, elements), total_levels)
 
     # Operators for each level
     ops = build_local_operators(implicit.reference)
@@ -49,161 +48,26 @@ function local_operator(total_levels = 2, inspect_level = 2)
     # Find the number of nodes per element at level `inspect_level`
     nodes_per_element = nnodes(refined_mesh(implicit, inspect_level))
 
-    x_base = map(x -> 1 - sum(x), base.nodes)
+    x_base = map(x -> 1 - sum(x), implicit.base.nodes)
 
-    x_distributed = zeros(4, nelements(base))
+    x_distributed = zeros(4, nelements(implicit.base))
     
-    for j = 1 : nelements(base), i = 1 : 4
-        x_distributed[i, j] = x_base[base.elements[j][i]]
-    end
+    # Distribute the unknowns
+    distribute!(x_distributed, x_base, implicit)
 
+    # Interpolate to finer levels
     for P in implicit.reference.interops
         x_distributed = P * x_distributed
-        @show size(P) size(x_distributed)
     end
 
     # Output matrix is y.
-    # x_distributed = rand(nodes_per_element, nelements(base))
-    y_distributed = zeros(nodes_per_element, nelements(base))
+    y_distributed = zeros(nodes_per_element, nelements(implicit.base))
 
     # Apply the operator on each base element
-    cell = cell_type(base)
-    quadrature = default_quad(cell)
-    element_values = ElementValues(cell, quadrature, update_det_J | update_inv_J)
-    
-    # Do the mv product.
-    for (el_idx, element) in enumerate(base.elements)
-        reinit!(element_values, base, element)
+    A_mul_B!(1.0, implicit.base, ∫ϕₓᵢϕₓⱼ_finest, x_distributed, 0.0, y_distributed)
 
-        Jinv = get_inv_jac(element_values)
-        detJ = get_detjac(element_values)
-
-        P = Jinv' * Jinv
-
-        x_local = view(x_distributed, :, el_idx)
-        y_local = view(y_distributed, :, el_idx)
-
-        # Apply the op finally.
-        for i = 1 : 3, j = 1 : 3
-            A_mul_B!(P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_finest.ops[i, j], x_local, 1.0, y_local)
-        end
-    end
-
-    # Distribute the faces.
-    local_numbering = implicit.reference.numbering[inspect_level]
-    nodes_per_face = nodes_per_face_interior(implicit.reference, inspect_level)
-
-    let buffer = zeros(nodes_per_face)
-        face_to_element = implicit.interfaces.faces
-        for (i, face) in enumerate(face_to_element.cells)
-            fill!(buffer, 0.0)
-
-            # Reduce
-            # Loop over the two connected elements
-            for j = face_to_element.offset[i] : face_to_element.offset[i + 1] - 1
-
-                # Get the global element id
-                element_data = face_to_element.values[j]
-
-                # Find the local numbering
-                nodes = local_numbering.faces_interior[element_data.local_id]
-
-                # Add the values to the buffer
-                for k = 1 : nodes_per_face
-                    buffer[k] += y_distributed[nodes[k], element_data.element]
-                end
-            end
-
-            # Broadcast
-            for j = face_to_element.offset[i] : face_to_element.offset[i + 1] - 1
-
-                # Get the global element id
-                element_data = face_to_element.values[j]
-
-                # Find the local numbering
-                nodes = local_numbering.faces_interior[element_data.local_id]
-
-                # Overwrite with the sum.
-                for k = 1 : nodes_per_face
-                    y_distributed[nodes[k], element_data.element] = buffer[k]
-                end
-            end
-        end
-    end
-
-    nodes_per_edge = nodes_per_edge_interior(implicit.reference, inspect_level)
-
-    let buffer = zeros(nodes_per_edge)
-        edge_to_element = implicit.interfaces.edges
-        for (i, edge) in enumerate(edge_to_element.cells)
-            fill!(buffer, 0.0)
-
-            # Reduce
-            # Loop over the two connected elements
-            for j = edge_to_element.offset[i] : edge_to_element.offset[i + 1] - 1
-
-                # Get the global element id
-                element_data = edge_to_element.values[j]
-
-                # Find the local numbering
-                nodes = local_numbering.edges_interior[element_data.local_id]
-
-                # Add the values to the buffer
-                for k = 1 : nodes_per_edge
-                    buffer[k] += y_distributed[nodes[k], element_data.element]
-                end
-            end
-
-            # Broadcast
-            for j = edge_to_element.offset[i] : edge_to_element.offset[i + 1] - 1
-
-                # Get the global element id
-                element_data = edge_to_element.values[j]
-
-                # Find the local numbering
-                nodes = local_numbering.edges_interior[element_data.local_id]
-
-                # Overwrite with the sum.
-                for k = 1 : nodes_per_edge
-                    y_distributed[nodes[k], element_data.element] = buffer[k]
-                end
-            end
-        end
-    end
-
-    let buffer = 0.0
-        node_to_element = implicit.interfaces.nodes
-        for (i, node) in enumerate(node_to_element.cells)
-            buffer = 0.0
-
-            # Reduce
-            # Loop over the two connected elements
-            for j = node_to_element.offset[i] : node_to_element.offset[i + 1] - 1
-
-                # Get the global element id
-                element_data = node_to_element.values[j]
-
-                # Find the local numbering
-                local_node = local_numbering.nodes[element_data.local_id]
-
-                # Add the values to the buffer
-                buffer += y_distributed[local_node, element_data.element]
-            end
-
-            # Broadcast
-            for j = node_to_element.offset[i] : node_to_element.offset[i + 1] - 1
-
-                # Get the global element id
-                element_data = node_to_element.values[j]
-
-                # Find the local numbering
-                local_node = local_numbering.nodes[element_data.local_id]
-
-                # Overwrite with the sum.
-                y_distributed[local_node, element_data.element] = buffer
-            end
-        end
-    end
+    # Accumulate the values along the interfaces and store them locally.
+    broadcast_interfaces!(y_distributed, implicit, inspect_level)
 
     # Construct the full grid (expensive if `inspect_level` is large)
     fine_mesh = construct_full_grid(implicit, inspect_level)

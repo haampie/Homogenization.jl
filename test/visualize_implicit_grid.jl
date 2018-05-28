@@ -4,7 +4,7 @@ using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map,
                nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
                get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
                construct_full_grid, ZeroDirichletConstraint, list_boundary_faces,
-               refined_mesh, apply_dirichlet_constraint!
+               refined_mesh, apply_constraint!
 using StaticArrays
 using WriteVTK
 
@@ -180,7 +180,7 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
     end
 
     # Apply zero Dirichlet boundary conditions.
-    apply_dirichlet_constraint!(u, store_level, constraint, implicit)
+    apply_constraint!(u, store_level, constraint, implicit)
 
     # Construct the full grid (expensive if `store_level` is large)
     fine_mesh = construct_full_grid(implicit, store_level)
