@@ -3,7 +3,7 @@ using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map,
                nodes_on_ref_edges, interfaces, face_to_elements, edge_to_elements,
                nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
                get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
-               construct_full_grid, ZeroDirichletConstraint, list_boundary_faces,
+               construct_full_grid, ZeroDirichletConstraint, list_boundary_nodes_edges_faces,
                refined_mesh, apply_constraint!
 using StaticArrays
 using WriteVTK
@@ -160,8 +160,10 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
 
     base = Mesh(nodes, elements)
 
-    # We apply a zero Dirichlet b.c. to all boundary faces.
-    constraint = ZeroDirichletConstraint(list_boundary_faces(base))
+    # We apply a zero Dirichlet b.c. to the boundary
+    nodes, edges, faces = list_boundary_nodes_edges_faces(base)
+
+    constraint = ZeroDirichletConstraint(nodes, edges, faces)
     
     # Implicitly refine things.
     implicit = ImplicitFineGrid(base, total_levels)

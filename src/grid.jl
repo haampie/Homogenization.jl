@@ -128,27 +128,3 @@ function list_interior_nodes(m::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     # Return the interior nodes
     complement(reinterpret(Ti, nodes), nnodes(m))
 end
-
-"""
-    list_boundary_faces(m::Mesh) -> Vector{ElementId}
-
-For a given input mesh we return a list of faces that are on the boundary.
-"""
-function list_boundary_faces(m::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
-
-    faces = list_faces_with_element(m)
-
-    # Sort the faces
-    radix_sort!(faces, nnodes(m), N - 1)
-
-    # Remove the interior faces
-    remove_repeated_pairs!(faces)
-
-    list = Vector{ElementId{Ti}}(length(faces))
-
-    @inbounds for i = 1 : length(faces)
-        list[i] = faces[i].data
-    end
-
-    list
-end

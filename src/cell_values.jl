@@ -72,7 +72,7 @@ const update_J         = 1 << 0
 const update_inv_J     = (1 << 1) | update_J
 const update_gradients = (1 << 2) | update_inv_J | update_J
 const update_det_J     = (1 << 3) | update_J
-const update_x         = 1 << 4
+const update_x         = 1 << 4 | update_J
 const everything = update_gradients | update_J | update_det_J | update_inv_J | update_x
 
 function ElementValues(cell::Type{<:ElementType{dim,ndof,Tv}}, quad::Type{<:QuadRule{dim,nquad,Tv}}, updates::Int = everything) where {dim,ndof,nquad,Tv}

@@ -159,22 +159,100 @@ function list_nodes_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
 end
 
 """
-    compress(v::Vector{CellToEll{N,Ti}}) -> SparseCellToElementMap
+    list_boundary_nodes_edges_faces(m::Tets) -> NTuple{3,SparseCellToElementMap}
 
-Compress a mapping from nodes, edges or faces to elements similar as what `sparse` does for
-a set of triplets.
+For a given input mesh we return sparse mappings from face, cell and node on the
+boundary to the element with the local face, cell and node number.
+"""
+function list_boundary_nodes_edges_faces(m::Tets{Tv,Ti}) where {Tv,Ti}
+
+    faces = list_faces_with_element(m)
+
+    # Sort the faces
+    radix_sort!(faces, nnodes(m), 3)
+
+    # Remove the interior faces
+    remove_repeated_pairs!(faces)
+
+    # Convert to sorted list of boundary edges
+    boundary_edges = Vector{Tuple{Ti,Ti}}(3 * length(faces))
+
+    idx = 1
+    @inbounds for face in faces
+        boundary_edges[idx + 0] = (face.nodes[1], face.nodes[2])
+        boundary_edges[idx + 1] = (face.nodes[1], face.nodes[3])
+        boundary_edges[idx + 2] = (face.nodes[2], face.nodes[3])
+        idx += 3
+    end
+
+    radix_sort!(boundary_edges, nnodes(m), 2)
+    remove_duplicates!(boundary_edges)
+
+    # List all edges
+    edges = list_edges_with_element(m)
+    radix_sort!(edges, nnodes(m), 2)
+
+    # Retain only those values of `edges` that occur in `boundary_edges`
+    intersect!(edges, boundary_edges)
+
+    # Convert to sorted list of boundary nodes
+    boundary_nodes = Vector{Tuple{Ti}}(2 * length(boundary_edges))
+    idx = 1
+    @inbounds for edge in boundary_edges
+        boundary_nodes[idx + 0] = (edge[1],)
+        boundary_nodes[idx + 1] = (edge[2],)
+        idx += 2
+    end
+
+    radix_sort!(boundary_nodes, nnodes(m), 1)
+    remove_duplicates!(boundary_nodes)
+
+    # List all nodes
+    nodes = list_nodes_with_element(m)
+    radix_sort!(nodes, nnodes(m), 1)
+    intersect!(nodes, boundary_nodes)
+
+    return compress(nodes), compress(edges), compress(faces)
+end
+
+"""
+Remove all items from `v` that do not occur in `w`, assuming `v` and `w` are
+sorted.
+# todo, make generic / clean things.
+"""
+function intersect!(v::Vector{CellToEl{N,Ti}}, w::Vector{NTuple{N,Ti}}, by = x -> x.nodes) where {N,Ti}
+    slow = 1
+    fast = 1
+    idx = 1
+
+    @inbounds while fast ≤ length(v) && idx ≤ length(w)
+        if by(v[fast]) < w[idx]
+            fast += 1
+        elseif by(v[fast]) === w[idx]
+            v[slow] = v[fast]
+            slow += 1
+            fast += 1
+        else
+            idx += 1
+        end
+    end
+
+    resize!(v, slow - 1)
+end
+
+"""
+    compress(v::Vector{CellToEl{N,Ti}}) -> SparseCellToElementMap
+
+Compress a mapping from nodes, edges or faces to elements similar as what 
+`sparse` does for a set of triplets.
 """
 function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
     # Count unique guys.
     unique = 1
-    @inbounds for i = 1 : length(v) - 1
-        if v[i] != v[i + 1]
+    @inbounds for i = 2 : length(v)
+        if v[i - 1] != v[i]
             unique += 1
         end
-    end
-
-    @inbounds if v[end] != v[end-1]
-        unique += 1
     end
 
     offset = Vector{Ti}(unique + 1)
@@ -185,20 +263,20 @@ function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
         offset[1] = 1
         values[1] = v[1].data
         cells[1] = v[1].nodes
-        offset[end] = length(v) + 1
-        offset_idx = 1
+        idx = 1
 
         for i = 2 : length(v)
             values[i] = v[i].data
 
-            # If we find a new cell, update the bookkeeping of offset pointers, and update
-            # the value.
+            # If we find a new cell, update the bookkeeping of offset pointers, 
+            # and update the value.
             if v[i] != v[i - 1]
-                offset_idx += 1
-                offset[offset_idx] = i
-                cells[offset_idx] = v[i].nodes
+                cells[idx += 1] = v[i].nodes
+                offset[idx] = i
             end
         end
+
+        offset[end] = length(v) + 1
     end
 
     return SparseCellToElementMap(offset, cells, values)

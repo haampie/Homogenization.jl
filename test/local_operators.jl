@@ -4,7 +4,7 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                nodes_on_ref_edges, interfaces, face_to_elements, edge_to_elements,
                nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
                get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
-               construct_full_grid, ZeroDirichletConstraint, list_boundary_faces,
+               construct_full_grid, ZeroDirichletConstraint, list_boundary_nodes_edges_faces,
                refined_mesh, apply_constraint!, cell_type, default_quad, ElementValues,
                update_det_J, update_inv_J, reinit!, get_inv_jac, get_det_jac, distribute!, 
                broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
@@ -93,7 +93,7 @@ function test_multigrid(total_levels = 5, store_level = 3)
     ]
 
     # Perturb things a bit.
-    # map!(x -> x .+ randn(3) / 50, nodes, nodes)
+    map!(x -> x .+ randn(3) / 50, nodes, nodes)
     
     # Split in tetrahedra
     elements = [
@@ -105,7 +105,7 @@ function test_multigrid(total_levels = 5, store_level = 3)
     ]
 
     # Factorize the coarse grid operator.
-    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 3)
+    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 4)
     interior = list_interior_nodes(coarse_mesh)
     Ac = assemble_matrix(coarse_mesh, dot)
     F = factorize(Ac[interior, interior])
@@ -120,7 +120,8 @@ function test_multigrid(total_levels = 5, store_level = 3)
     @show implicit
     
     # Dirichlet condition
-    constraint = ZeroDirichletConstraint(list_boundary_faces(implicit.base))
+    nodes, edges, faces = list_boundary_nodes_edges_faces(implicit.base)
+    constraint = ZeroDirichletConstraint(nodes, edges, faces)
 
     # Allocate the x's, r's and b's.
     level_states = map(1 : total_levels) do i
@@ -133,35 +134,32 @@ function test_multigrid(total_levels = 5, store_level = 3)
         LevelOperator(op, constraint)
     end
 
+    # A = assemble_matrix(refine_uniformly(coarse_mesh, times = total_levels), dot)
+
     # Set up the problem Ax = b.
     
     # x is initially random with values matching on the interfaces and 0 on the boundary
-    rand!(level_states[end].x)
+    rand!(level_states[total_levels].x)
     broadcast_interfaces!(level_states[total_levels].x, implicit, total_levels)
     apply_constraint!(level_states[total_levels].x, total_levels, constraint, implicit)
 
     # b is just ones and matching on the interfaces.
     h = 1 / 2^total_levels
-    fill!(level_states[end].b, h^2)
+    fill!(level_states[total_levels].b, h^3)
     apply_constraint!(level_states[total_levels].b, total_levels, constraint, implicit)
 
-    ωs = fill(1.1, total_levels)
+    ωs = [1.0, 1.8, 2.9, 4.7, 7.3, 15.0]
 
     # Do a v-cycle :tada:
     vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels)
     
     fine_mesh = construct_full_grid(implicit, store_level)
 
-
-    w = rand!(similar(level_states[store_level].x))
-    apply_constraint!(w, store_level, constraint, implicit)
-
     # Save the full grid
     vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
         vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
         vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
         vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
-        vtk_point_data(vtk, reshape(w, :), "does it work")
-        vtk_cell_data(vtk, collect(1 : nelements(fine_mesh)), "elements")
+        vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
     end    
 end

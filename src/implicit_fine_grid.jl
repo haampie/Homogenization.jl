@@ -75,39 +75,76 @@ function construct_full_grid(g::ImplicitFineGrid{dim,N,Tv,Ti}, level::Int) where
     return Mesh(nodes, elements)
 end
 
-struct ZeroDirichletConstraint{Ti}
-    list_of_faces::Vector{ElementId{Ti}}
+struct ZeroDirichletConstraint{Ti,Nn,Ne,Nf}
+    nodes::SparseCellToElementMap{Nn,Ti}
+    edges::SparseCellToElementMap{Ne,Ti}
+    faces::SparseCellToElementMap{Nf,Ti}
 end
 
 """
-    apply_constraint!(u, level, ::ZeroDirichletConstraint, ::ImplicitFineGrid)
+    apply_constraint!(x, level, ::ZeroDirichletConstraint, ::ImplicitFineGrid)
 
 Apply zero Dirichlet conditions to the nodes on the boundary of implicitly refined
-vector `u`. ZeroDirichletConstraint contains the faces of the base mesh, and via
-the ImplicitFineGrid we get the local numbering of the faces to zero them out.
+vector `u`. ZeroDirichletConstraint contains the faces, edges and nodes of the 
+base mesh, and via the ImplicitFineGrid we get the local numbering of the faces,
+edges and nodes to zero them out.
 """
-function apply_constraint!(u::Matrix{Tv}, level::Int, z::ZeroDirichletConstraint{Ti}, g::ImplicitFineGrid{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
-    
-    # Maybe get rid of these assertions one day.
-    @assert size(u, 1) == nnodes(refined_mesh(g, level))
-    @assert size(u, 2) == nelements(base_mesh(g))
+function apply_constraint!(x::Matrix{Tv}, level::Int, z::ZeroDirichletConstraint{Ti}, implicit::ImplicitFineGrid{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
+    numbering = local_numbering(implicit, level)
 
-    numbering = local_numbering(g, level)
+    # FACES
+    nodes_per_face = nodes_per_face_interior(implicit.reference, level)
 
-    @inbounds for faceInfo in z.list_of_faces
-        # Extract the base element id
-        element = faceInfo.element
+    for i = 1 : length(z.faces.cells)
+        for j = z.faces.offset[i] : z.faces.offset[i + 1] - 1
 
-        # And the local face number.
-        face = faceInfo.local_id
+            # Get the global element id
+            element_data = z.faces.values[j]
 
-        # Zero out each node on the boundary.
-        for node = numbering.faces[face]
-            u[node, element] = zero(Tv)
+            # Find the local numbering
+            nodes = numbering.faces_interior[element_data.local_id]
+
+            # Add the values to the buffer
+            for k = 1 : nodes_per_face
+                x[nodes[k], element_data.element] = zero(Tv)
+            end
         end
     end
 
-    u
+    # EDGES
+    nodes_per_edge = nodes_per_edge_interior(implicit.reference, level)
+    for i = 1 : length(z.edges.cells)
+        for j = z.edges.offset[i] : z.edges.offset[i + 1] - 1
+
+            # Get the global element id
+            element_data = z.edges.values[j]
+
+            # Find the local numbering
+            nodes = numbering.edges_interior[element_data.local_id]
+
+            # Add the values to the buffer
+            for k = 1 : nodes_per_edge
+                x[nodes[k], element_data.element] = zero(Tv)
+            end
+        end
+    end
+
+    # NODES
+    for i = 1 : length(z.nodes.cells)
+        for j = z.nodes.offset[i] : z.nodes.offset[i + 1] - 1
+
+            # Get the global element id
+            element_data = z.nodes.values[j]
+
+            # Find the local numbering
+            local_node = numbering.nodes[element_data.local_id]
+
+            # Add the values to the buffer
+            x[local_node, element_data.element] = zero(Tv)
+        end
+    end
+
+    x
 end
 
 """
@@ -299,5 +336,60 @@ function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
         end
     end
 
+    x
+end
+
+"""
+If a node is shared among multiple multiple coarse elements, we will zero out
+all of them except in the first listed element.
+"""
+function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid, level::Int) where {Tv}
+
+    local_numbering = implicit.reference.numbering[level]
+
+    # FACES
+    nodes_per_face = nodes_per_face_interior(implicit.reference, level)
+    face_to_element = implicit.interfaces.faces
+    for i = 1 : length(face_to_element.cells), j = face_to_element.offset[i] + 1 : face_to_element.offset[i + 1] - 1
+        # Get the global element id
+        element_data = face_to_element.values[j]
+
+        # Find the local numbering
+        nodes = local_numbering.faces_interior[element_data.local_id]
+
+        # Add the values to the buffer
+        for k = 1 : nodes_per_face
+            x[nodes[k], element_data.element] = zero(Tv)
+        end
+    end
+
+    # EDGES
+    nodes_per_edge = nodes_per_edge_interior(implicit.reference, level)
+    edge_to_element = implicit.interfaces.edges
+    for i = 1 : length(edge_to_element.cells), j = edge_to_element.offset[i] + 1 : edge_to_element.offset[i + 1] - 1
+        # Get the global element id
+        element_data = edge_to_element.values[j]
+
+        # Find the local numbering
+        nodes = local_numbering.edges_interior[element_data.local_id]
+
+        # Add the values to the buffer
+        for k = 1 : nodes_per_edge
+            x[nodes[k], element_data.element] = zero(Tv)
+        end
+    end
+
+    # NODES
+    node_to_element = implicit.interfaces.nodes
+    for i = 1 : length(node_to_element.cells), j = node_to_element.offset[i] + 1 : node_to_element.offset[i + 1] - 1
+        # Get the global element id
+        element_data = node_to_element.values[j]
+
+        # Find the local numbering
+        local_node = local_numbering.nodes[element_data.local_id]
+
+        # Add the values to the buffer
+        x[local_node, element_data.element] = zero(Tv)
+    end
     x
 end

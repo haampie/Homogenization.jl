@@ -52,9 +52,6 @@ function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, cur
     # r ← 0.0
     fill!(curr.r, 0.0)
 
-    # Apply the boundary condition.
-    apply_constraint!(curr.x, k, ops.bc, implicit)
-
     # r ← -Ax
     A_mul_B!(-1.0, implicit.base, ops.A, curr.x, curr.r)
 
@@ -98,14 +95,14 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
 
         # Smooth
         println("Level ", k, " now smoothing 5 times.")
-        for i = 1 : 5
+        for i = 1 : 2
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
             @show vecnorm(curr.r)
         end
 
         # Restrict: bₖ₋₁ ← Pᵀrₖ
         println("Restricting the residual")
-        apply_constraint!(curr.r, k, ops[k].bc, implicit)
+        zero_out_all_but_one!(curr.r, implicit, k)
         At_mul_B!(next.b, P, curr.r)
         apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
         broadcast_interfaces!(next.b, implicit, k - 1)
@@ -120,10 +117,10 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
 
         # Smooth
         println("Level ", k, ": smoothing 5 more times.")
-        for i = 1 : 5
-            smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            @show vecnorm(curr.r)
-        end
+        # for i = 1 : 2
+        #     smoothing_step!(implicit, ops[k], ωs[k], curr, k)
+        #     @show vecnorm(curr.r)
+        # end
     end
 
     return nothing
