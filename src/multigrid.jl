@@ -46,9 +46,9 @@ function BaseLevel(Tv::Type{<:Number}, F, total_nodes::Integer, interior_nodes::
 end
 
 """
-Performs a single Richardson iteration
+Compute the residual r = b - A * x
 """
-function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, curr::LevelState, k::Int)
+function residual!(implicit::ImplicitFineGrid, ops::LevelOperator, curr::LevelState, k::Int)
     # r ← 0.0
     fill!(curr.r, 0.0)
 
@@ -63,12 +63,20 @@ function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, cur
     
     # r ← r + b = b - Ax
     axpy!(1.0, curr.b, curr.r)
+end
 
-    # x ← ω * r + x
+"""
+Performs a single Richardson iteration
+"""
+function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, curr::LevelState, k::Int)
+    # r ← b - A * x
+    residual!(implicit, ops, curr, k)
+
+    # x ← x + ω * r 
     axpy!(ω, curr.r, curr.x)
 end
 
-function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LevelOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int)
+function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LevelOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int, debug::Bool = false)
     if k == 1
         # Use the global numbering again.
         copy_to_base!(base.b, levels[1].b, implicit)
@@ -79,13 +87,11 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         # Unfortunately this allocates :s
         tmp = base.A_inv \ base.b_interior
 
-        copy!(base.b_interior, tmp)
-
         # Apply the boundary condition (should in face go with apply_constraint, but who cares)
         fill!(base.b, 0.0)
 
         # Copy stuff over.
-        base.b[base.interior_nodes] .= base.b_interior
+        base.b[base.interior_nodes] .= tmp
 
         # Distribute the values to the implicit grid again.
         distribute!(levels[1].x, base.b, implicit)
@@ -94,33 +100,40 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         P = implicit.reference.interops[k - 1]
 
         # Smooth
-        println("Level ", k, " now smoothing 5 times.")
+        debug && println("Level ", k, " now smoothing 5 times.")
         for i = 1 : 2
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            @show vecnorm(curr.r)
+            debug && println("Residual ≤ ", vecnorm(curr.r))    
         end
 
+        residual!(implicit, ops[k], curr, k)
+        debug && println("Residual ≤ ", vecnorm(curr.r))
+
         # Restrict: bₖ₋₁ ← Pᵀrₖ
-        println("Restricting the residual")
+        debug && println("Restricting the residual")
         zero_out_all_but_one!(curr.r, implicit, k)
         At_mul_B!(next.b, P, curr.r)
+        fill!(next.x, 0.0)
         apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
         broadcast_interfaces!(next.b, implicit, k - 1)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
-        println("Going to next level")
-        vcycle!(implicit, base, ops, levels, ωs, k - 1)
+        debug && println("Going to next level")
+        vcycle!(implicit, base, ops, levels, ωs, k - 1, debug)
 
         # Interpolate: xₖ ← xₖ + Pxₖ₋₁: we basically us rₖ as a temporary.
-        println("Interpolating back.")
+        debug && println("Interpolating back.")
         A_mul_B!(1.0, P, next.x, 1.0, curr.x)
 
         # Smooth
-        println("Level ", k, ": smoothing 5 more times.")
-        # for i = 1 : 2
-        #     smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-        #     @show vecnorm(curr.r)
-        # end
+        debug && println("Level ", k, ": smoothing 5 more times.")
+        for i = 1 : 2
+            smoothing_step!(implicit, ops[k], ωs[k], curr, k)
+            debug && println("Residual ≤ ", vecnorm(curr.r))
+        end
+
+        residual!(implicit, ops[k], curr, k)
+        debug && println("Residual ≤ ", vecnorm(curr.r))
     end
 
     return nothing

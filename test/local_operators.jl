@@ -8,7 +8,7 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                refined_mesh, apply_constraint!, cell_type, default_quad, ElementValues,
                update_det_J, update_inv_J, reinit!, get_inv_jac, get_det_jac, distribute!, 
                broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
-               list_interior_nodes, assemble_matrix, BaseLevel
+               list_interior_nodes, assemble_matrix, BaseLevel, zero_out_all_but_one!
 
 function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
     # Unit cube
@@ -106,6 +106,7 @@ function test_multigrid(total_levels = 5, store_level = 3)
 
     # Factorize the coarse grid operator.
     coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 4)
+    sort_element_nodes!(coarse_mesh.elements)
     interior = list_interior_nodes(coarse_mesh)
     Ac = assemble_matrix(coarse_mesh, dot)
     F = factorize(Ac[interior, interior])
@@ -114,8 +115,6 @@ function test_multigrid(total_levels = 5, store_level = 3)
 
     # Build a multilevel grid
     implicit = ImplicitFineGrid(coarse_mesh, total_levels)
-
-    @assert all(issorted, implicit.base.elements)
 
     @show implicit
     
@@ -140,6 +139,7 @@ function test_multigrid(total_levels = 5, store_level = 3)
     
     # x is initially random with values matching on the interfaces and 0 on the boundary
     rand!(level_states[total_levels].x)
+    zero_out_all_but_one!(level_states[total_levels].x, implicit, total_levels)
     broadcast_interfaces!(level_states[total_levels].x, implicit, total_levels)
     apply_constraint!(level_states[total_levels].x, total_levels, constraint, implicit)
 
@@ -148,10 +148,12 @@ function test_multigrid(total_levels = 5, store_level = 3)
     fill!(level_states[total_levels].b, h^3)
     apply_constraint!(level_states[total_levels].b, total_levels, constraint, implicit)
 
-    ωs = [1.0, 1.8, 2.9, 4.7, 7.3, 15.0]
+    ωs = [1.0, 4.0, 5.0, 11.0]
 
     # Do a v-cycle :tada:
-    vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels)
+    for i = 1 : 10
+        vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, true)
+    end
     
     fine_mesh = construct_full_grid(implicit, store_level)
 

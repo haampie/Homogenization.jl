@@ -52,6 +52,11 @@ function refined_element(n::Int, m::Type{Mesh{dim,N,Tv,Ti}}) where {dim,N,Tv,Ti}
         interops[i] = interpolation_operator(levels[i], graph)
     end
 
+    # Note sure if necessary.
+    for mesh in levels
+        sort_element_nodes!(mesh.elements)
+    end
+
     MultilevelReference(levels, numbering, interops)
 end
 

@@ -1,24 +1,30 @@
-using Rewrite: assemble_matrix_and_rhs, refine_uniformly, Mesh, list_interior_nodes, nnodes, nelements
+using Rewrite: assemble_matrix, assemble_vector, refine_uniformly, 
+               Mesh, list_interior_nodes, nnodes, nelements, sort_element_nodes!
 using StaticArrays
 using WriteVTK
 
 function poisson()
-    nodes = SVector{3,Float64}[(0,0,0), (1,0,0), (0,1,0), (0,0,1)]
-    elements = [(1,2,3,4)]
-    # nodes = SVector{2,Float64}[(0,0), (1,0), (0,1)]
-    # elements = [(1,2,3)]
-    mesh = refine_uniformly(Mesh(nodes,elements), times = 7)
+    nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
+
+    # Perturb things a bit.
+    map!(x -> x .+ randn(3) / 50, nodes, nodes)
+    
+    # Split in tetrahedra
+    elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
+
+    mesh = refine_uniformly(Mesh(nodes,elements), times = 6)
 
     @show nnodes(mesh) nelements(mesh)
+
+    sort_element_nodes!(mesh.elements)
 
     interior = list_interior_nodes(mesh)
 
     println("Assembling")
-    A, b = assemble_matrix_and_rhs(mesh)
-    @profile assemble_matrix_and_rhs(mesh)
 
+    A = assemble_matrix(mesh, dot)
+    b = assemble_vector(mesh, identity)
     x = zeros(nnodes(mesh))
-    # x[interior] .= 1.0
 
     println("Solving")
     x[interior] .= A[interior,interior] \ b[interior]

@@ -11,6 +11,7 @@ struct ImplicitFineGrid{dim,N,Tv,Ti,Nn,Ne,Nf}
 end
 
 function ImplicitFineGrid(base::Mesh{dim,N,Tv,Ti}, levels::Int) where {dim,N,Tv,Ti}
+    @assert all(issorted, base.elements)
     reference = refined_element(levels, typeof(base))
     inter = interfaces(base)
     ImplicitFineGrid(levels, reference, inter, base)

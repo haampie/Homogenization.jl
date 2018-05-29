@@ -37,10 +37,8 @@ end
 
 function refine_uniformly(m::Mesh; times::Int = 1)
     for i = 1 : times
-        sort_element_nodes!(m.elements)
         m = refine_uniformly(m, edge_graph(m))
     end
-    sort_element_nodes!(m.elements)
     m
 end
 
@@ -78,6 +76,8 @@ end
 List the faces of tets
 """
 function list_faces(m::Mesh{3,4,Tv,Ti}) where {Tv,Ti}
+    @assert all(issorted, m.elements)
+
     faces = Vector{NTuple{3,Ti}}(4 * nelements(m))
     idx = 1
     @inbounds for el in m.elements
@@ -94,6 +94,8 @@ end
 List the "faces" of triangles, i.e. edges.
 """
 function list_faces(m::Mesh{2,3,Tv,Ti}) where {Tv,Ti}
+    @assert all(issorted, m.elements)
+    
     faces = Vector{NTuple{2,Ti}}(3 * nelements(m))
     idx = 1
     @inbounds for el in m.elements

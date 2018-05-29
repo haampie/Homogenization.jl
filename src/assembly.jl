@@ -48,3 +48,41 @@ function assemble_matrix(mesh::Mesh{dim,N,Tv,Ti}, bf::Function) where {dim,N,Tv,
     # Build the sparse matrix
     return dropzeros!(sparse(is, js, vs, Nn, Nn))
 end
+
+"""
+Build a vector for a given mesh and functional
+"""
+function assemble_vector(mesh::Mesh{dim,N,Tv,Ti}, functional::Function) where {dim,N,Tv,Ti}
+    cell = cell_type(mesh)
+    quadrature = default_quad(cell)
+    weights = get_weights(quadrature)
+    element_values = ElementValues(cell, quadrature, update_det_J)
+
+    Nt = nelements(mesh)
+    Nn = nnodes(mesh)
+    Nq = nquadpoints(quadrature)
+        
+    b = zeros(Nn)
+    b_local = zeros(Tv, N)
+
+    # Loop over all elements & compute the local system matrix
+    @inbounds for element in mesh.elements
+        reinit!(element_values, mesh, element)
+
+        # Reset local matrix
+        fill!(b_local, zero(Tv))
+
+        # For each quad point
+        @inbounds for qp = 1 : Nq, i = 1:N
+            v = get_value(element_values, qp, i)
+            b_local[i] += weights[qp] * functional(v)
+        end
+
+        # Copy the local vec over to the global one
+        @inbounds for i = 1:N
+            b[element[i]] += b_local[i] * get_det_jac(element_values)
+        end
+    end
+
+    return b
+end
