@@ -61,7 +61,7 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
 
         # Copy the local matrix over to the global one
         @inbounds for i = 1:N, j = 1:N
-            det = get_detjac(element_values)
+            det = get_det_jac(element_values)
 
             for k = 1 : 9
                 Is[k][idx] = element[i]
@@ -92,7 +92,7 @@ function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫�
         reinit!(element_values, base, element)
 
         Jinv = get_inv_jac(element_values)
-        detJ = get_detjac(element_values)
+        detJ = get_det_jac(element_values)
 
         P = Jinv' * Jinv
 

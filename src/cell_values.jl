@@ -150,4 +150,4 @@ Get inv(J')
 """
 Get the |J|, the absolute value of the determinant of the affine map
 """
-@propagate_inbounds get_detjac(c::ElementValues) = c.det_jacobian.value
+@propagate_inbounds get_det_jac(c::ElementValues) = c.det_jacobian.value

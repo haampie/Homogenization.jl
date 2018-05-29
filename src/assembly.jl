@@ -40,7 +40,7 @@ function assemble_matrix(mesh::Mesh{dim,N,Tv,Ti}, bf::Function) where {dim,N,Tv,
         @inbounds for i = 1:N, j = 1:N
             is[idx] = element[i]
             js[idx] = element[j]
-            vs[idx] = A_local[i,j] * get_detjac(element_values)
+            vs[idx] = A_local[i,j] * get_det_jac(element_values)
             idx += 1
         end
     end

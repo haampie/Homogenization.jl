@@ -6,7 +6,7 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
                construct_full_grid, ZeroDirichletConstraint, list_boundary_faces,
                refined_mesh, apply_constraint!, cell_type, default_quad, ElementValues,
-               update_det_J, update_inv_J, reinit!, get_inv_jac, get_detjac, distribute!, 
+               update_det_J, update_inv_J, reinit!, get_inv_jac, get_det_jac, distribute!, 
                broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
                list_interior_nodes, assemble_matrix, BaseLevel
 
