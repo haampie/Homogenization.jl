@@ -66,6 +66,7 @@ struct ElementValues{dim,nquad,nfuncs,Tv,S,U}
     det_jacobian::Wrap{Tv}
     xs::MMatrix{dim,nquad,Tv,S}
     ref_xs::SMatrix{dim,nquad,Tv,S}
+    offset::MVector{dim,Tv}
 end
 
 const update_J         = 1 << 0
@@ -98,6 +99,7 @@ function ElementValues(cell::Type{<:ElementType{dim,ndof,Tv}}, quad::Type{<:Quad
         Wrap(zero(Tv)),
         @MMatrix(zeros(dim,nquad)),
         xs_matrix,
+        @MVector(zeros(dim))
     )
 end
 
@@ -106,6 +108,7 @@ end
     if should(c, update_J)
         J, shift = affine_map(m, element) 
         copy!(c.jacobian, J)
+        copy!(c.offset, shift)
     end
 
     if should(c, update_inv_J)
@@ -121,7 +124,7 @@ end
     end
 
     if should(c, update_x)
-        copy!(c.xs, c.jacobian * c.xs .+ affine_map_shift(m, element))
+        copy!(c.xs, c.jacobian * c.xs .+ c.offset)
     end
 end
 
@@ -151,3 +154,13 @@ Get inv(J')
 Get the |J|, the absolute value of the determinant of the affine map
 """
 @propagate_inbounds get_det_jac(c::ElementValues) = c.det_jacobian.value
+
+"""
+Get the jacobian J.
+"""
+@propagate_inbounds get_jac(c::ElementValues) = c.jacobian
+
+"""
+Map a local coord in the ref element to a coord in the actual element
+"""
+@inline get_x(c::ElementValues, x::SVector) = c.jacobian * x + c.offset

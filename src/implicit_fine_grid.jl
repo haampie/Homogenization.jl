@@ -94,55 +94,42 @@ function apply_constraint!(x::Matrix{Tv}, level::Int, z::ZeroDirichletConstraint
     numbering = local_numbering(implicit, level)
 
     # FACES
-    nodes_per_face = nodes_per_face_interior(implicit.reference, level)
+    @inbounds for i = 1 : length(z.faces.cells), j = valrange(z.faces, i)
 
-    for i = 1 : length(z.faces.cells)
-        for j = z.faces.offset[i] : z.faces.offset[i + 1] - 1
+        # Get the global element id
+        element_data = z.faces.values[j]
 
-            # Get the global element id
-            element_data = z.faces.values[j]
+        # Find the local numbering
+        nodes = numbering.faces_interior[element_data.local_id]
 
-            # Find the local numbering
-            nodes = numbering.faces_interior[element_data.local_id]
-
-            # Add the values to the buffer
-            for k = 1 : nodes_per_face
-                x[nodes[k], element_data.element] = zero(Tv)
-            end
+        # Add the values to the buffer
+        for node in nodes
+            x[node, element_data.element] = zero(Tv)
         end
     end
 
     # EDGES
-    nodes_per_edge = nodes_per_edge_interior(implicit.reference, level)
-    for i = 1 : length(z.edges.cells)
-        for j = z.edges.offset[i] : z.edges.offset[i + 1] - 1
+    @inbounds for i = 1 : length(z.edges.cells), j = valrange(z.edges, i)
 
-            # Get the global element id
-            element_data = z.edges.values[j]
+        # Get the global element id
+        element_data = z.edges.values[j]
 
-            # Find the local numbering
-            nodes = numbering.edges_interior[element_data.local_id]
-
-            # Add the values to the buffer
-            for k = 1 : nodes_per_edge
-                x[nodes[k], element_data.element] = zero(Tv)
-            end
+        # Add the values to the buffer
+        for node in numbering.edges_interior[element_data.local_id]
+            x[node, element_data.element] = zero(Tv)
         end
     end
 
     # NODES
-    for i = 1 : length(z.nodes.cells)
-        for j = z.nodes.offset[i] : z.nodes.offset[i + 1] - 1
+    @inbounds for i = 1 : length(z.nodes.cells), j = valrange(z.nodes, i)
+        # Get the global element id
+        element_data = z.nodes.values[j]
 
-            # Get the global element id
-            element_data = z.nodes.values[j]
+        # Find the local numbering
+        node = numbering.nodes[element_data.local_id]
 
-            # Find the local numbering
-            local_node = numbering.nodes[element_data.local_id]
-
-            # Add the values to the buffer
-            x[local_node, element_data.element] = zero(Tv)
-        end
+        # Add the values to the buffer
+        x[node, element_data.element] = zero(Tv)
     end
 
     x
@@ -195,7 +182,7 @@ function distribute!(v::Matrix{Tv}, u::Vector{Tv}, implicit::ImplicitFineGrid{di
         value = u[global_idx]
 
         # Loop over all the the elements connected to this node.
-        for j = node_to_element.offset[i] : node_to_element.offset[i + 1] - 1
+        for j = valrange(node_to_element, i)
             # Get the global element data
             element_data = node_to_element.values[j]
 
@@ -225,12 +212,11 @@ function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
 
     let buffer = zeros(Tv, nodes_per_face)
         face_to_element = implicit.interfaces.faces
-        for i = 1 : length(face_to_element.cells)
+        @inbounds for i = 1 : length(face_to_element.cells)
             fill!(buffer, zero(Tv))
 
             # Reduce
-            # Loop over the two connected elements
-            for j = face_to_element.offset[i] : face_to_element.offset[i + 1] - 1
+            for j = valrange(face_to_element, i)
 
                 # Get the global element id
                 element_data = face_to_element.values[j]
@@ -245,7 +231,7 @@ function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
             end
 
             # Broadcast
-            for j = face_to_element.offset[i] : face_to_element.offset[i + 1] - 1
+            for j = valrange(face_to_element, i)
 
                 # Get the global element id
                 element_data = face_to_element.values[j]
@@ -266,12 +252,11 @@ function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
 
     let buffer = zeros(Tv, nodes_per_edge)
         edge_to_element = implicit.interfaces.edges
-        for i = 1 : length(edge_to_element.cells)
+        @inbounds for i = 1 : length(edge_to_element.cells)
             fill!(buffer, zero(Tv))
 
             # Reduce
-            # Loop over the two connected elements
-            for j = edge_to_element.offset[i] : edge_to_element.offset[i + 1] - 1
+            for j = valrange(edge_to_element, i)
 
                 # Get the global element id
                 element_data = edge_to_element.values[j]
@@ -286,7 +271,7 @@ function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
             end
 
             # Broadcast
-            for j = edge_to_element.offset[i] : edge_to_element.offset[i + 1] - 1
+            for j = valrange(edge_to_element, i)
 
                 # Get the global element id
                 element_data = edge_to_element.values[j]
@@ -303,37 +288,34 @@ function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
     end
 
     # NODES
-    let buffer = zero(Tv)
-        node_to_element = implicit.interfaces.nodes
-        for i = 1 : length(node_to_element.cells)
-            buffer = zero(Tv)
+    node_to_element = implicit.interfaces.nodes
+    for i = 1 : length(node_to_element.cells)
+        buffer = zero(Tv)
 
-            # Reduce
-            # Loop over the two connected elements
-            for j = node_to_element.offset[i] : node_to_element.offset[i + 1] - 1
+        # Reduce
+        @inbounds for j = valrange(node_to_element, i)
 
-                # Get the global element id
-                element_data = node_to_element.values[j]
+            # Get the global element id
+            element_data = node_to_element.values[j]
 
-                # Find the local numbering
-                local_node = local_numbering.nodes[element_data.local_id]
+            # Find the local numbering
+            local_node = local_numbering.nodes[element_data.local_id]
 
-                # Add the values to the buffer
-                buffer += x[local_node, element_data.element]
-            end
+            # Add the values to the buffer
+            buffer += x[local_node, element_data.element]
+        end
 
-            # Broadcast
-            for j = node_to_element.offset[i] : node_to_element.offset[i + 1] - 1
+        # Broadcast
+        for j = valrange(node_to_element, i)
 
-                # Get the global element id
-                element_data = node_to_element.values[j]
+            # Get the global element id
+            element_data = node_to_element.values[j]
 
-                # Find the local numbering
-                local_node = local_numbering.nodes[element_data.local_id]
+            # Find the local numbering
+            local_node = local_numbering.nodes[element_data.local_id]
 
-                # Overwrite with the sum.
-                x[local_node, element_data.element] = buffer
-            end
+            # Overwrite with the sum.
+            x[local_node, element_data.element] = buffer
         end
     end
 
@@ -351,7 +333,7 @@ function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
     # FACES
     nodes_per_face = nodes_per_face_interior(implicit.reference, level)
     face_to_element = implicit.interfaces.faces
-    for i = 1 : length(face_to_element.cells), j = face_to_element.offset[i] + 1 : face_to_element.offset[i + 1] - 1
+    @inbounds for i = 1 : length(face_to_element.cells), j = face_to_element.offset[i] + 1 : face_to_element.offset[i + 1] - 1
         # Get the global element id
         element_data = face_to_element.values[j]
 
@@ -367,7 +349,7 @@ function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
     # EDGES
     nodes_per_edge = nodes_per_edge_interior(implicit.reference, level)
     edge_to_element = implicit.interfaces.edges
-    for i = 1 : length(edge_to_element.cells), j = edge_to_element.offset[i] + 1 : edge_to_element.offset[i + 1] - 1
+    @inbounds for i = 1 : length(edge_to_element.cells), j = edge_to_element.offset[i] + 1 : edge_to_element.offset[i + 1] - 1
         # Get the global element id
         element_data = edge_to_element.values[j]
 
@@ -382,7 +364,7 @@ function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
 
     # NODES
     node_to_element = implicit.interfaces.nodes
-    for i = 1 : length(node_to_element.cells), j = node_to_element.offset[i] + 1 : node_to_element.offset[i + 1] - 1
+    @inbounds for i = 1 : length(node_to_element.cells), j = node_to_element.offset[i] + 1 : node_to_element.offset[i + 1] - 1
         # Get the global element id
         element_data = node_to_element.values[j]
 

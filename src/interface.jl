@@ -35,6 +35,11 @@ struct SparseCellToElementMap{N,Ti}
 end
 
 """
+Return the value indices range of cell `i`
+"""
+@propagate_inbounds valrange(s::SparseCellToElementMap, i::Integer) = s.offset[i] : s.offset[i + 1] - 1
+
+"""
 The nodes, edges and faces members are sparse mappings from a node, edge or face
 on the interface to the corresponding element with the local index of the node,
 edge or face. We also store `all_nodes`, which includes the nodes that do not
