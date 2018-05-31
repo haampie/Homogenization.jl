@@ -42,33 +42,70 @@ function refine_uniformly(m::Mesh; times::Int = 1)
     m
 end
 
+"""
+    nnodes(mesh) -> Int
+
+Returns the number of nodes in the mesh
+"""
 nnodes(mesh::Mesh) = length(mesh.nodes)
+
+
+"""
+    nelements(mesh) -> Int
+
+Returns the number of elements in the mesh
+"""
 nelements(mesh::Mesh) = length(mesh.elements)
+
+const TET_FACES = ((1,2,3),(1,2,4),(1,3,4),(2,3,4))
+const TET_EDGES = ((1,2),(1,3),(1,4),(2,3),(2,4),(3,4))
+const TRI_EDGES = ((1,2),(1,3),(2,3))
+
+"""
+Returns the indices of an element that makes up face `i`
+"""
+@propagate_inbounds face_indices(::Type{<:Tet}, i::Int) = TET_FACES[i]
+
+
+"""
+Returns the indices of an element that makes up edge `i`
+"""
+@propagate_inbounds edge_indices(::Type{<:Tet}, i::Int) = TET_EDGES[i]
+
+"""
+Basically returns m.elements[element_idx][indices], but does not create a vector
+of indices.
+"""
+@propagate_inbounds function get_node_numbers(m::Mesh{dim,N,Tv,Ti}, element_idx::Integer, indices::NTuple{M,Ti}) where {dim,N,Tv,Ti,M}
+    el = m.elements[element_idx]
+    NTuple{M,Ti}(el[i] for i in indices)
+end
+
+@propagate_inbounds function get_nodes(m::Mesh{dim,N,Tv,Ti}, element::NTuple{M,Ti}) where {dim,N,Tv,Ti,M}
+    NTuple{M,SVector{dim,Tv}}(m.nodes[i] for i in element)
+end
 
 """
 Returns the affine map from the reference element to the given element.
 """
-function affine_map(m::Tris{Tv,Ti}, el::NTuple{3,Ti}) where {Tv,Ti}
-    @inbounds begin
-        p1 = m.nodes[el[1]]
-        p2 = m.nodes[el[2]]
-        p3 = m.nodes[el[3]]
-        return [p2 - p1 p3 - p1], p1
-    end
+@inline function affine_map(m::Tris{Tv,Ti}, el::NTuple{3,Ti}) where {Tv,Ti}
+    @inbounds p1, p2, p3 = get_nodes(m, el)
+    return [p2 - p1 p3 - p1], p1
 end
 
-function affine_map_shift(m::Tris{Tv,Ti}, el::NTuple{3,Ti}) where {Tv,Ti}
+"""
+Returns the offset of the affine map from the reference element to the given element.
+"""
+@inline function affine_map_shift(m::Tris{Tv,Ti}, el::NTuple{3,Ti}) where {Tv,Ti}
     @inbounds return m.nodes[el[1]]
 end
 
-function affine_map(m::Tets{Tv,Ti}, el::NTuple{4,Ti}) where {Tv,Ti}
-    @inbounds begin
-        p1, p2, p3, p4 = m.nodes[el[1]], m.nodes[el[2]], m.nodes[el[3]], m.nodes[el[4]]
-        return [p2 - p1 p3 - p1 p4 - p1], p1
-    end
+@inline function affine_map(m::Tets{Tv,Ti}, el::NTuple{4,Ti}) where {Tv,Ti}
+    @inbounds p1, p2, p3, p4 = m.nodes[el[1]], m.nodes[el[2]], m.nodes[el[3]], m.nodes[el[4]]
+    return [p2 - p1 p3 - p1 p4 - p1], p1
 end
 
-function affine_map_shift(m::Tets{Tv,Ti}, el::NTuple{4,Ti}) where {Tv,Ti}
+@inline function affine_map_shift(m::Tets{Tv,Ti}, el::NTuple{4,Ti}) where {Tv,Ti}
     @inbounds return m.nodes[el[1]]
 end
 

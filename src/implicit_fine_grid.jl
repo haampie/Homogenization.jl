@@ -21,6 +21,7 @@ nlevels(g::ImplicitFineGrid) = g.levels
 base_mesh(g::ImplicitFineGrid) = g.base
 @propagate_inbounds refined_mesh(g::ImplicitFineGrid, level::Int) = g.reference.levels[level]
 @propagate_inbounds local_numbering(g::ImplicitFineGrid, level::Int) = g.reference.numbering[level]
+cell_type(g::ImplicitFineGrid) = cell_type(g.base)
 
 function show(io::IO, g::ImplicitFineGrid)
     base = base_mesh(g)
@@ -179,7 +180,7 @@ function distribute!(v::Matrix{Tv}, u::Vector{Tv}, implicit::ImplicitFineGrid{di
     # Loop over all nodes and copy each value to all distributed elements
     @inbounds for (i, node) = enumerate(node_to_element.cells)
         global_idx, = node
-        value = u[global_idx]
+        u_val = u[global_idx]
 
         # Loop over all the the elements connected to this node.
         for j = valrange(node_to_element, i)
@@ -193,7 +194,7 @@ function distribute!(v::Matrix{Tv}, u::Vector{Tv}, implicit::ImplicitFineGrid{di
             element_idx = value.element
 
             # Copy the value over.
-            v[local_node, element_idx] = value
+            v[local_node, element_idx] = u_val
         end
     end
 end
@@ -401,4 +402,90 @@ function global_rhs!(b::AbstractMatrix, implicit::ImplicitFineGrid{dim,N,Tv,Ti})
 
     # Sum along the interfaces
     broadcast_interfaces!(b, implicit, nlevels(implicit))
+end
+
+
+
+"""
+    full_grid_without_duplicates(g::ImplicitFineGrid, level::Int) -> Mesh
+
+Builds the full mesh at a certain level with elements on the interfaces occurring
+just once. Be very scared, cause the number of nodes gets large! There are still
+duplicate nodes though, but we don't care.
+"""
+function full_grid_without_duplicates(g::ImplicitFineGrid{dim,N,Tv,Ti}, level::Int) where {dim,N,Tv,Ti}
+    base = base_mesh(g)
+    ref_mesh = refined_mesh(g, level)
+
+    # Since we copy nodes on the interface, we have #coarse * #ref nodes & elements
+    total_nodes = nelements(base) * nnodes(ref_mesh)
+    total_elements = nelements(base) * nelements(ref_mesh)
+
+    nodes = Vector{SVector{dim,Tv}}(total_nodes)
+    elements = Matrix{NTuple{N,Ti}}(total_elements)
+
+    # Now for each base element we simply apply the coordinate transform to each
+    # node, and we copy over each fine element. We only have to renumber the
+    # fine elements by the offset of the base element number.
+
+    node_idx = 0
+    element_idx = 0
+    offset = 0
+
+    @inbounds for element in base.elements
+        # Get the coordinate mapping
+        J, b = affine_map(base, element)
+        
+        # Copy the transformed nodes over
+        for node in ref_mesh.nodes
+            nodes[node_idx += 1] = J * node + b
+        end
+
+        # Copy over the elements
+        for element in ref_mesh.elements
+            elements[element_idx += 1] = element .+ offset
+        end
+
+        offset += nnodes(ref_mesh)
+    end
+
+    # Fix the repeated nodes, edges & faces.
+    local_numbering = implicit.reference.numbering[level]
+
+    # FACES
+    f2e = implicit.interfaces.faces
+
+    @inbounds for i = 1 : length(f2e.cells)
+
+        # Get the first face.
+        value = f2e.values[f2e.offset[i]]
+
+        # Get the element indices of this face
+        face_idxs = face_indices(cell_type(g), value.local_id)
+
+        # Get the node numbers that make up this face.
+        face_node_numbers = get_node_numbers(ref_mesh, value.element, face_idxs)
+        
+        # Overwrite the other faces with these node numbers
+        for j = f2e.offset[i] + 1 : f2e.offset[i + 1] - 1
+            # Get the global element id
+            value_ = f2e.values[j]
+
+            # Find the local numbering
+            face_idxs_ = face_indices(cell_type(g), value.local_id)
+
+            # Current element id.
+            el_ = value.element
+
+            offset_ = (nnodes(ref_mesh) - 1) * el_ + el_
+
+            # Overwrite the face
+            for k in face_idxs_
+                elements[]
+            end
+
+        end
+    end
+
+    return Mesh(nodes, elements)
 end

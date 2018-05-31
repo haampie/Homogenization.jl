@@ -106,7 +106,7 @@ function test_multigrid(total_levels = 5, store_level = 3)
     ]
 
     # Factorize the coarse grid operator.
-    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 4)
+    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 0)
     sort_element_nodes!(coarse_mesh.elements)
     interior = list_interior_nodes(coarse_mesh)
     Ac = assemble_matrix(coarse_mesh, dot)
@@ -148,22 +148,20 @@ function test_multigrid(total_levels = 5, store_level = 3)
     global_rhs!(level_states[total_levels].b, implicit)
     apply_constraint!(level_states[total_levels].b, total_levels, constraint, implicit)
 
-    ωs = [1.0, 2.0, 5.0, 11.0]
+    ωs = fill(0.5, total_levels)
 
     # Do a v-cycle :tada:
     for i = 1 : 1
         vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, true)
     end
-
-    return implicit
     
-    # fine_mesh = construct_full_grid(implicit, store_level)
+    fine_mesh = construct_full_grid(implicit, store_level)
 
     # Save the full grid
-    # vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
-    #     vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
-    #     vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
-    #     vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
-    #     vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
-    # end    
+    vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
+        vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
+        vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
+        vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
+        vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
+    end    
 end

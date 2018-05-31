@@ -25,63 +25,69 @@ using StaticArrays
     e2e = implicit.interfaces.edges
     f2e = implicit.interfaces.faces
 
-    local_numbering = implicit.reference.numbering[refs]
-    finest = refined_mesh(implicit, refs)
+    for level = 1 : refs
+        local_numbering = implicit.reference.numbering[level]
+        ref_mesh = refined_mesh(implicit, level)
 
-    # Loop over all nodes on some interface
-    @inbounds for i = 1 : length(n2e.cells)
+        # Loop over all nodes on some interface
+        @inbounds for i = 1 : length(n2e.cells)
 
-        # Loop over all the elements belonging to this face
-        xs_per_element = map(valrange(n2e, i)) do j
-            value = n2e.values[j]
-            node = local_numbering.nodes[value.local_id]
+            # Loop over all the elements belonging to this face
+            xs_per_element = map(valrange(n2e, i)) do j
+                value = n2e.values[j]
+                node = local_numbering.nodes[value.local_id]
 
-            # Update the affine map
-            reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
+                # Update the affine map
+                reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
 
-            # Find the actual x coord of each node.
-            get_x(element_values, finest.nodes[node])
+                # Find the actual x coord of each node.
+                get_x(element_values, ref_mesh.nodes[node])
+            end
+
+            # Test if the others are equal to the first
+            @test all(x -> x ≈ first(xs_per_element), xs_per_element)
         end
 
-        # Test if the others are equal to the first
-        @test all(x -> x ≈ first(xs_per_element), xs_per_element)
-    end
+        # Loop over all edges on some interface
+        @inbounds for i = 1 : length(e2e.cells)
+            
+            # Loop over all the elements belonging to this face
+            xs_per_element = map(valrange(e2e, i)) do j
+                value = e2e.values[j]
+                nodes = local_numbering.edges_interior[value.local_id]
 
-    # Loop over all edges on some interface
-    @inbounds for i = 1 : length(e2e.cells)
-        
-        # Loop over all the elements belonging to this face
-        xs_per_element = map(valrange(e2e, i)) do j
-            value = e2e.values[j]
-            nodes = local_numbering.edges_interior[value.local_id]
+                # Update the affine map
+                reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
 
-            # Update the affine map
-            reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
+                # Find the actual x coord of each node.
+                map(k -> get_x(element_values, ref_mesh.nodes[k]), nodes)
+            end
 
-            # Find the actual x coord of each node.
-            map(k -> get_x(element_values, finest.nodes[k]), nodes)
+            all(isempty, xs_per_element) && continue
+
+            # Test if the others are equal to the first
+            @test all(x -> x ≈ first(xs_per_element), xs_per_element)
         end
 
-        # Test if the others are equal to the first
-        @test all(x -> x ≈ first(xs_per_element), xs_per_element)
-    end
+        # Loop over all faces on some interface
+        @inbounds for i = 1 : length(f2e.cells)
+            
+            # Loop over all the elements belonging to this face
+            xs_per_element = map(valrange(f2e, i)) do j
+                value = f2e.values[j]
+                nodes = local_numbering.faces_interior[value.local_id]
 
-    # Loop over all faces on some interface
-    @inbounds for i = 1 : length(f2e.cells)
-        
-        # Loop over all the elements belonging to this face
-        xs_per_element = map(valrange(f2e, i)) do j
-            value = f2e.values[j]
-            nodes = local_numbering.faces_interior[value.local_id]
+                # Update the affine map
+                reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
 
-            # Update the affine map
-            reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
+                # Find the actual x coord of each node.
+                map(k -> get_x(element_values, ref_mesh.nodes[k]), nodes)
+            end
 
-            # Find the actual x coord of each node.
-            map(k -> get_x(element_values, finest.nodes[k]), nodes)
+            all(isempty, xs_per_element) && continue
+            
+            # Test if the others are equal to the first
+            @test all(x -> x ≈ first(xs_per_element), xs_per_element)
         end
-
-        # Test if the others are equal to the first
-        @test all(x -> x ≈ first(xs_per_element), xs_per_element)
     end
 end
