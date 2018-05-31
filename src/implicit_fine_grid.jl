@@ -394,3 +394,29 @@ function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
     end
     x
 end
+
+"""
+Build a global rhs with functional ∫v
+"""
+function global_rhs!(b::AbstractMatrix, implicit::ImplicitFineGrid{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
+    base = base_mesh(implicit)
+    fine = refined_mesh(implicit, nlevels(implicit))
+    
+    @assert size(b) == (nnodes(fine), nelements(base))
+
+    # Construct b on the reference element
+    b_ref = assemble_vector(fine, identity)
+
+    cell = cell_type(base)
+    quadrature = default_quad(cell)
+    weights = get_weights(quadrature)
+    element_values = ElementValues(cell, quadrature, update_det_J)
+
+    @inbounds for (idx, element) in enumerate(base.elements)
+        reinit!(element_values, base, element)
+        b[:, idx] .= b_ref .* get_det_jac(element_values)
+    end
+
+    # Sum along the interfaces
+    broadcast_interfaces!(b, implicit, nlevels(implicit))
+end

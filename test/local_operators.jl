@@ -8,7 +8,8 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                refined_mesh, apply_constraint!, cell_type, default_quad, ElementValues,
                update_det_J, update_inv_J, reinit!, get_inv_jac, get_det_jac, distribute!, 
                broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
-               list_interior_nodes, assemble_matrix, BaseLevel, zero_out_all_but_one!
+               list_interior_nodes, assemble_matrix, BaseLevel, zero_out_all_but_one!,
+               global_rhs!
 
 function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
     # Unit cube
@@ -144,24 +145,25 @@ function test_multigrid(total_levels = 5, store_level = 3)
     apply_constraint!(level_states[total_levels].x, total_levels, constraint, implicit)
 
     # b is just ones and matching on the interfaces.
-    h = 1 / 2^total_levels
-    fill!(level_states[total_levels].b, h^3)
+    global_rhs!(level_states[total_levels].b, implicit)
     apply_constraint!(level_states[total_levels].b, total_levels, constraint, implicit)
 
-    ωs = [1.0, 4.0, 5.0, 11.0]
+    ωs = [1.0, 2.0, 5.0, 11.0]
 
     # Do a v-cycle :tada:
-    for i = 1 : 10
+    for i = 1 : 1
         vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, true)
     end
+
+    return implicit
     
-    fine_mesh = construct_full_grid(implicit, store_level)
+    # fine_mesh = construct_full_grid(implicit, store_level)
 
     # Save the full grid
-    vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
-        vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
-        vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
-        vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
-        vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
-    end    
+    # vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
+    #     vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
+    #     vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
+    #     vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
+    #     vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
+    # end    
 end

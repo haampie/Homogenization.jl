@@ -101,7 +101,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
 
         # Smooth
         debug && println("Level ", k, " now smoothing 5 times.")
-        for i = 1 : 2
+        for i = 1 : 5
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
             debug && println("Residual ≤ ", vecnorm(curr.r))    
         end
@@ -113,7 +113,6 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         debug && println("Restricting the residual")
         zero_out_all_but_one!(curr.r, implicit, k)
         At_mul_B!(next.b, P, curr.r)
-        fill!(next.x, 0.0)
         apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
         broadcast_interfaces!(next.b, implicit, k - 1)
 
@@ -127,7 +126,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
 
         # Smooth
         debug && println("Level ", k, ": smoothing 5 more times.")
-        for i = 1 : 2
+        for i = 1 : 5
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
             debug && println("Residual ≤ ", vecnorm(curr.r))
         end
