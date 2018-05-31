@@ -33,11 +33,11 @@ using StaticArrays
 
         # Loop over all the elements belonging to this face
         xs_per_element = map(valrange(n2e, i)) do j
-            element_data = n2e.values[j]
-            node = local_numbering.nodes[element_data.local_id]
+            value = n2e.values[j]
+            node = local_numbering.nodes[value.local_id]
 
             # Update the affine map
-            reinit!(element_values, coarse_mesh, coarse_mesh.elements[element_data.element])
+            reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
 
             # Find the actual x coord of each node.
             get_x(element_values, finest.nodes[node])
@@ -52,11 +52,11 @@ using StaticArrays
         
         # Loop over all the elements belonging to this face
         xs_per_element = map(valrange(e2e, i)) do j
-            element_data = e2e.values[j]
-            nodes = local_numbering.edges_interior[element_data.local_id]
+            value = e2e.values[j]
+            nodes = local_numbering.edges_interior[value.local_id]
 
             # Update the affine map
-            reinit!(element_values, coarse_mesh, coarse_mesh.elements[element_data.element])
+            reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
 
             # Find the actual x coord of each node.
             map(k -> get_x(element_values, finest.nodes[k]), nodes)
@@ -71,11 +71,11 @@ using StaticArrays
         
         # Loop over all the elements belonging to this face
         xs_per_element = map(valrange(f2e, i)) do j
-            element_data = f2e.values[j]
-            nodes = local_numbering.faces_interior[element_data.local_id]
+            value = f2e.values[j]
+            nodes = local_numbering.faces_interior[value.local_id]
 
             # Update the affine map
-            reinit!(element_values, coarse_mesh, coarse_mesh.elements[element_data.element])
+            reinit!(element_values, coarse_mesh, coarse_mesh.elements[value.element])
 
             # Find the actual x coord of each node.
             map(k -> get_x(element_values, finest.nodes[k]), nodes)
