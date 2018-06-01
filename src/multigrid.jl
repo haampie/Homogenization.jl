@@ -46,23 +46,17 @@ function BaseLevel(Tv::Type{<:Number}, F, total_nodes::Integer, interior_nodes::
 end
 
 """
-Compute the residual r = b - A * x
+Compute the residual r = b - A * x locally on each subdomain.
 """
-function residual!(implicit::ImplicitFineGrid, ops::LevelOperator, curr::LevelState, k::Int)
-    # r ← 0.0
-    fill!(curr.r, 0.0)
+function local_residual!(implicit::ImplicitFineGrid, ops::LevelOperator, curr::LevelState, k::Int)
+    # r ← b
+    copy!(curr.r, curr.b)
 
-    # r ← -Ax
+    # r ← r - Ax = b - Ax
     A_mul_B!(-1.0, implicit.base, ops.A, curr.x, curr.r)
 
     # Apply the boundary condition.
     apply_constraint!(curr.r, k, ops.bc, implicit)
-
-    # Accumulate the nodes on the interface and update their local values.
-    broadcast_interfaces!(curr.r, implicit, k)
-    
-    # r ← r + b = b - Ax
-    axpy!(1.0, curr.b, curr.r)
 end
 
 """
@@ -70,7 +64,10 @@ Performs a single Richardson iteration
 """
 function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, curr::LevelState, k::Int)
     # r ← b - A * x
-    residual!(implicit, ops, curr, k)
+    local_residual!(implicit, ops, curr, k)
+
+    # Global residual
+    broadcast_interfaces!(curr.r, implicit, k)
 
     # x ← x + ω * r 
     axpy!(ω, curr.r, curr.x)
@@ -78,6 +75,8 @@ end
 
 function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LevelOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int, debug::Bool = false)
     if k == 1
+        broadcast_interfaces!(levels[1].b, implicit, 1)
+
         # Use the global numbering again.
         copy_to_base!(base.b, levels[1].b, implicit)
 
@@ -100,21 +99,20 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         P = implicit.reference.interops[k - 1]
 
         # Smooth
-        debug && println("Level ", k, " now smoothing 5 times.")
-        for i = 1 : 5
+        debug && println("Level ", k, " now smoothing.")
+        for i = 1 : 3
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            debug && println("Residual ≤ ", vecnorm(curr.r))    
+            debug && println("Global residual ≤ ", vecnorm(curr.r))    
         end
 
-        residual!(implicit, ops[k], curr, k)
-        debug && println("Residual ≤ ", vecnorm(curr.r))
+        local_residual!(implicit, ops[k], curr, k)
+        debug && println("Local residual ≤ ", vecnorm(curr.r))
 
         # Restrict: bₖ₋₁ ← Pᵀrₖ
-        debug && println("Restricting the residual")
-        zero_out_all_but_one!(curr.r, implicit, k)
+        debug && println("Restricting the local residual")
         At_mul_B!(next.b, P, curr.r)
         apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
-        broadcast_interfaces!(next.b, implicit, k - 1)
+        # broadcast_interfaces!(next.b, implicit, k - 1)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
         debug && println("Going to next level")
@@ -125,14 +123,11 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         A_mul_B!(1.0, P, next.x, 1.0, curr.x)
 
         # Smooth
-        debug && println("Level ", k, ": smoothing 5 more times.")
-        for i = 1 : 5
+        debug && println("Level ", k, ": smoothing.")
+        for i = 1 : 3
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            debug && println("Residual ≤ ", vecnorm(curr.r))
+            debug && println("Global residual ≤ ", vecnorm(curr.r))
         end
-
-        residual!(implicit, ops[k], curr, k)
-        debug && println("Residual ≤ ", vecnorm(curr.r))
     end
 
     return nothing

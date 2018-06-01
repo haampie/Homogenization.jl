@@ -379,9 +379,9 @@ function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid
 end
 
 """
-Build a global rhs with functional ∫v
+Build a local rhs with functional ∫v
 """
-function global_rhs!(b::AbstractMatrix, implicit::ImplicitFineGrid{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
+function local_rhs!(b::AbstractMatrix, implicit::ImplicitFineGrid{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     base = base_mesh(implicit)
     fine = refined_mesh(implicit, nlevels(implicit))
     
@@ -399,9 +399,6 @@ function global_rhs!(b::AbstractMatrix, implicit::ImplicitFineGrid{dim,N,Tv,Ti})
         reinit!(element_values, base, element)
         b[:, idx] .= b_ref .* get_det_jac(element_values)
     end
-
-    # Sum along the interfaces
-    broadcast_interfaces!(b, implicit, nlevels(implicit))
 end
 
 

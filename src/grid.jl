@@ -1,3 +1,5 @@
+using Base: @propagate_inbounds
+
 struct Mesh{dim,N,Tv,Ti}
     nodes::Vector{SVector{dim,Tv}}
     elements::Vector{NTuple{N,Ti}}

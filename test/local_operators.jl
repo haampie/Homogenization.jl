@@ -9,7 +9,7 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                update_det_J, update_inv_J, reinit!, get_inv_jac, get_det_jac, distribute!, 
                broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
                list_interior_nodes, assemble_matrix, BaseLevel, zero_out_all_but_one!,
-               global_rhs!
+               local_rhs!, assemble_vector, local_residual!
 
 function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
     # Unit cube
@@ -80,7 +80,7 @@ function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
     
 end
 
-function test_multigrid(total_levels = 5, store_level = 3)
+function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debug = false)
     # Unit cube
     nodes = SVector{3,Float64}[
         (0,0,0),
@@ -94,7 +94,7 @@ function test_multigrid(total_levels = 5, store_level = 3)
     ]
 
     # Perturb things a bit.
-    map!(x -> x .+ randn(3) / 50, nodes, nodes)
+    # map!(x -> x .+ randn(3) / 50, nodes, nodes)
     
     # Split in tetrahedra
     elements = [
@@ -106,7 +106,7 @@ function test_multigrid(total_levels = 5, store_level = 3)
     ]
 
     # Factorize the coarse grid operator.
-    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 0)
+    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 3)
     sort_element_nodes!(coarse_mesh.elements)
     interior = list_interior_nodes(coarse_mesh)
     Ac = assemble_matrix(coarse_mesh, dot)
@@ -134,26 +134,50 @@ function test_multigrid(total_levels = 5, store_level = 3)
         LevelOperator(op, constraint)
     end
 
-    # A = assemble_matrix(refine_uniformly(coarse_mesh, times = total_levels), dot)
+    # Solve with `\`
+    # total_mesh = refine_uniformly(coarse_mesh, times = total_levels - 1)
+    # sort_element_nodes!(total_mesh.elements)
+    # A = assemble_matrix(total_mesh, dot)
+    # b = assemble_vector(total_mesh, identity)
+    # interior = list_interior_nodes(total_mesh)
+    # x = zeros(nnodes(total_mesh))
+    # A_int = A[interior, interior]
+    # x[interior] .= A[interior, interior] \ b[interior]
 
-    # Set up the problem Ax = b.
+    # return 2 / (eigs(A_int, which = :LR, nev = 1)[1][1] + eigs(A_int, which = :SR, nev = 1)[1][1])
+
+    # vtk = vtk_grid("multigridstuff_reference", total_mesh) do vtk
+    #     vtk_point_data(vtk, x, "x")
+    #     vtk_point_data(vtk, b, "b")
+    # end
+
+    # Set up the problem Ax = b for multigrid
     
     # x is initially random with values matching on the interfaces and 0 on the boundary
-    rand!(level_states[total_levels].x)
-    zero_out_all_but_one!(level_states[total_levels].x, implicit, total_levels)
-    broadcast_interfaces!(level_states[total_levels].x, implicit, total_levels)
-    apply_constraint!(level_states[total_levels].x, total_levels, constraint, implicit)
+    finest_level = level_states[total_levels]
+
+    rand!(finest_level.x)
+    zero_out_all_but_one!(finest_level.x, implicit, total_levels)
+    broadcast_interfaces!(finest_level.x, implicit, total_levels)
+    apply_constraint!(finest_level.x, total_levels, constraint, implicit)
 
     # b is just ones and matching on the interfaces.
-    global_rhs!(level_states[total_levels].b, implicit)
-    apply_constraint!(level_states[total_levels].b, total_levels, constraint, implicit)
+    local_rhs!(finest_level.b, implicit)
+    apply_constraint!(finest_level.b, total_levels, constraint, implicit)
 
-    ωs = fill(0.5, total_levels)
+    ωs = [1.1, 1.8, 3.0, 5.5, 7.8, 12.0]
 
     # Do a v-cycle :tada:
-    for i = 1 : 1
-        vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, true)
+    residuals = Float64[]
+    for i = 1 : iterations
+        vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, debug)
+        local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
+        broadcast_interfaces!(finest_level.r, implicit, total_levels)
+        push!(residuals, vecnorm(finest_level.r))
+        @show last(residuals)
     end
+
+    return residuals
     
     fine_mesh = construct_full_grid(implicit, store_level)
 
