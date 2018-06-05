@@ -1,4 +1,5 @@
 import Base.LinAlg: A_mul_B!
+using Base.Threads: @threads, nthreads
 
 struct ∫ϕₓᵢϕₓⱼ{dim,num,Tv,Ti}
     ops::SMatrix{dim,dim,SparseMatrixCSC{Tv,Ti},num}
@@ -83,24 +84,48 @@ Compute `y ← α * A * x + y` in a distributed fashion. Note that it does not z
 out `y`. (todo)
 """
 function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫ϕₓᵢϕₓⱼ, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+
+    # Circular distribution
+    @threads for t = 1 : nthreads()
+        do_share_of_mv_product!(t, nthreads(), α, base, ∫ϕₓᵢϕₓⱼ_ops, x, y)
+    end
+end
+
+"""
+The actual mv product that is performed per thread
+"""
+function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫ϕₓᵢϕₓⱼ, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+
     cell = cell_type(base)
-    
     element_values = ElementValues(cell, default_quad(cell), update_det_J | update_inv_J)
 
-    @inbounds for (el_idx, element) in enumerate(base.elements)
-        reinit!(element_values, base, element)
+    @inbounds for el_idx = thread_id : nthreads : nelements(base)
+        reinit!(element_values, base, base.elements[el_idx])
 
         Jinv = get_inv_jac(element_values)
         detJ = get_det_jac(element_values)
 
         P = Jinv' * Jinv
 
-        x_local = view(x, :, el_idx)
-        y_local = view(y, :, el_idx)
+        # Try to avoid making views in a loop here
+        offset = (el_idx - 1) * size(x, 1)
 
-        # Apply the op finally.
+        # Apply the ops finally.
         for i = 1 : 3, j = 1 : 3
-            A_mul_B!(α * P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], x_local, 1.0, y_local)
+            scalar = α * P[i, j] * detJ
+            scalar == 0 && continue
+            my_A_mul_B!(scalar, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], x, y, offset)
+            # A_mul_B!(α * P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], view(x, :, el_idx), 1.0, view(y, :, el_idx))
         end
     end
+end
+
+function my_A_mul_B!(α, A::SparseMatrixCSC, x::AbstractMatrix, y::AbstractMatrix, offset::Int)
+    @inbounds for j = 1 : A.n
+        αxj = α * x[j + offset]
+        for i = A.colptr[j] : A.colptr[j + 1] - 1
+            y[A.rowval[i] + offset] += A.nzval[i] * αxj
+        end
+    end
+    y
 end

@@ -7,12 +7,12 @@ using StaticArrays
 
 @testset "Test whether implicit nodes on the interfaces match" begin
     # Refinements
-    refs = 6
+    refs = 5
 
     # Cube    
     nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
     elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
-    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 4)
+    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 3)
     sort_element_nodes!(coarse_mesh.elements)
 
     implicit = ImplicitFineGrid(coarse_mesh, refs)

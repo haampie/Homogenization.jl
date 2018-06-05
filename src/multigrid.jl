@@ -112,7 +112,6 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         debug && println("Restricting the local residual")
         At_mul_B!(next.b, P, curr.r)
         apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
-        # broadcast_interfaces!(next.b, implicit, k - 1)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
         debug && println("Going to next level")
