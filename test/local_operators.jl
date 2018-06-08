@@ -134,27 +134,6 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
         LevelOperator(op, constraint)
     end
 
-    # Solve with `\`
-    # total_mesh = refine_uniformly(coarse_mesh, times = total_levels - 1)
-    # sort_element_nodes!(total_mesh.elements)
-    # total_interior = list_interior_nodes(total_mesh)
-    # A = assemble_matrix(total_mesh, dot)[total_interior, total_interior]
-
-    # return A
-
-    # b = assemble_vector(total_mesh, identity)
-    # interior = list_interior_nodes(total_mesh)
-    # x = zeros(nnodes(total_mesh))
-    # A_int = A[interior, interior]
-    # x[interior] .= A[interior, interior] \ b[interior]
-
-    # return 2 / (eigs(A_int, which = :LR, nev = 1)[1][1] + eigs(A_int, which = :SR, nev = 1)[1][1])
-
-    # vtk = vtk_grid("multigridstuff_reference", total_mesh) do vtk
-    #     vtk_point_data(vtk, x, "x")
-    #     vtk_point_data(vtk, b, "b")
-    # end
-
     # Set up the problem Ax = b for multigrid
     
     # x is initially random with values matching on the interfaces and 0 on the boundary
@@ -169,7 +148,7 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
     local_rhs!(finest_level.b, implicit)
     apply_constraint!(finest_level.b, total_levels, constraint, implicit)
 
-    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0, 11.0]
+    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0] / 1.5
 
     # Do a v-cycle :tada:
     residuals = Float64[]
@@ -177,6 +156,7 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
         vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, debug)
         local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
         broadcast_interfaces!(finest_level.r, implicit, total_levels)
+        zero_out_all_but_one!(finest_level.r, implicit, total_levels)
         push!(residuals, vecnorm(finest_level.r))
         @show last(residuals)
     end
@@ -184,12 +164,12 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
     fine_mesh = construct_full_grid(implicit, store_level)
 
     # Save the full grid
-    vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
-        vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
-        vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
-        vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
-        vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
-    end    
+    # vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
+    #     vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
+    #     vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
+    #     vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
+    #     vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
+    # end    
 
     return residuals
 end

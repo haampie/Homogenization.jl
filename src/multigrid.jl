@@ -100,7 +100,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
 
         # Smooth
         debug && println("Level ", k, " now smoothing.")
-        for i = 1 : 3
+        for i = 1 : 10
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
             debug && println("Global residual ≤ ", vecnorm(curr.r))    
         end
@@ -123,7 +123,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
 
         # Smooth
         debug && println("Level ", k, ": smoothing.")
-        for i = 1 : 3
+        for i = 1 : 10
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
             debug && println("Global residual ≤ ", vecnorm(curr.r))
         end
