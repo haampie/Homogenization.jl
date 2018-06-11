@@ -1,3 +1,5 @@
+using Base.Threads: @threads, nthreads
+
 """
 Return the interpolation operator assuming all linear basis elements and all
 edges being split in two.
@@ -45,4 +47,28 @@ function interpolation_operator(mesh::Mesh{dim,N,Tv,Ti}, graph::SparseGraph{Ti})
 
     # Note the transpose
     return SparseMatrixCSC(Nn, Nn + Ne, colptr, rowval, nzval)'
+end
+
+function interpolate_and_sum_to!(y::AbstractMatrix, P, x::AbstractMatrix)
+    @threads for id = 1 : nthreads()
+        _interpolate_and_sum_to(y, P, x, id)
+    end
+end
+
+function _interpolate_and_sum_to(y::AbstractMatrix, P, x::AbstractMatrix, id::Int)
+    @inbounds for col = id : nthreads() : size(x, 2)
+        A_mul_B!(1, P, view(x, :, col), 1, view(y, :, col))
+    end
+end
+
+function restrict_to!(y::AbstractMatrix, P, x::AbstractMatrix)
+    @threads for id = 1 : nthreads()
+        _restrict_to(y, P, x, id)
+    end
+end
+
+function _restrict_to(y::AbstractMatrix, P, x::AbstractMatrix, id::Int)
+    @inbounds for col = id : nthreads() : size(x, 2)
+        At_mul_B!(view(y, :, col), 1, view(x, :, col))
+    end
 end

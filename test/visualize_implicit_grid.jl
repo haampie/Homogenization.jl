@@ -169,7 +169,7 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
     implicit = ImplicitFineGrid(base, total_levels)
 
     # Shows some info about number of nodes
-    println(implicit)
+    @show implicit
 
     # Find the number of nodes per element at level `store_level`
     nodes_per_element = nnodes(refined_mesh(implicit, store_level))

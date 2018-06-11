@@ -117,7 +117,7 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
     # Build a multilevel grid
     implicit = ImplicitFineGrid(coarse_mesh, total_levels)
 
-    @show implicit
+    # @show implicit
     
     # Dirichlet condition
     nodes, edges, faces = list_boundary_nodes_edges_faces(implicit.base)
@@ -134,8 +134,6 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
         LevelOperator(op, constraint)
     end
 
-    # Set up the problem Ax = b for multigrid
-    
     # x is initially random with values matching on the interfaces and 0 on the boundary
     finest_level = level_states[total_levels]
 
@@ -158,7 +156,7 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
         broadcast_interfaces!(finest_level.r, implicit, total_levels)
         zero_out_all_but_one!(finest_level.r, implicit, total_levels)
         push!(residuals, vecnorm(finest_level.r))
-        @show last(residuals)
+        # @show last(residuals)
     end
 
     fine_mesh = construct_full_grid(implicit, store_level)

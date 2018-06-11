@@ -86,7 +86,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         # Unfortunately this allocates :s
         tmp = base.A_inv \ base.b_interior
 
-        # Apply the boundary condition (should in face go with apply_constraint, but who cares)
+        # Apply the boundary condition (should maybe go with apply_constraint)
         fill!(base.b, 0.0)
 
         # Copy stuff over.
@@ -99,33 +99,25 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         P = implicit.reference.interops[k - 1]
 
         # Smooth
-        debug && println("Level ", k, " now smoothing.")
-        for i = 1 : 10
+        for i = 1 : 1
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            debug && println("Global residual ≤ ", vecnorm(curr.r))    
         end
 
         local_residual!(implicit, ops[k], curr, k)
-        debug && println("Local residual ≤ ", vecnorm(curr.r))
 
         # Restrict: bₖ₋₁ ← Pᵀrₖ
-        debug && println("Restricting the local residual")
-        At_mul_B!(next.b, P, curr.r)
+        restrict_to!(next.b, P, curr.r)
         apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
-        debug && println("Going to next level")
         vcycle!(implicit, base, ops, levels, ωs, k - 1, debug)
 
-        # Interpolate: xₖ ← xₖ + Pxₖ₋₁: we basically us rₖ as a temporary.
-        debug && println("Interpolating back.")
-        A_mul_B!(1.0, P, next.x, 1.0, curr.x)
+        # Interpolate: xₖ ← xₖ + Pxₖ₋₁
+        interpolate_and_sum_to!(curr.x, P, next.x)
 
         # Smooth
-        debug && println("Level ", k, ": smoothing.")
-        for i = 1 : 10
+        for i = 1 : 1
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-            debug && println("Global residual ≤ ", vecnorm(curr.r))
         end
     end
 
