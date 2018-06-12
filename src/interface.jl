@@ -34,6 +34,13 @@ struct SparseCellToElementMap{N,Ti}
     values::Vector{ElementId{Ti}}
 end
 
+# Construct an empty sparse map
+empty_map(N::Int, Ti::Type{<:Integer} = Int) = SparseCellToElementMap{N,Int}(
+    Ti[],
+    Vector{NTuple{N,Ti}}(),
+    Vector{ElementId{Ti}}()
+end
+
 """
 Return the value indices range of cell `i`
 """
@@ -55,10 +62,9 @@ end
 @propagate_inbounds getindex(f::CellToEl, i) = f.nodes[i]
 @inline (==)(a::CellToEl, b::CellToEl) = a.nodes === b.nodes
 
-function interfaces(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+function interfaces(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     # First order the element nodes.
     @assert all(issorted, mesh.elements)
-    # sort_element_nodes!(mesh.elements)
 
     all_nodes, nodes = node_to_elements(mesh)
     edges = edge_to_elements(mesh)
@@ -73,7 +79,7 @@ end
 Returns two sparse maps from face -> node with local face index. The first has all nodes,
 the second only has nodes that are on the interface between elements.
 """
-function node_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+function node_to_elements(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     node_list = list_nodes_with_element(mesh)
     radix_sort!(node_list, nnodes(mesh), 1)
     all_nodes = copy(node_list)    
@@ -87,7 +93,7 @@ end
 Returns a sparse map from edge -> element with local edge index, where the edges lie on the
 interface between elements.
 """
-function edge_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+function edge_to_elements(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     edge_list = list_edges_with_element(mesh)
     radix_sort!(edge_list, nnodes(mesh), 2)
     remove_singletons!(edge_list)
@@ -100,12 +106,15 @@ end
 Returns a sparse map from face -> element with local face index, where the faces lie on the
 interface between elements.
 """
-function face_to_elements(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+function face_to_elements(mesh::Mesh{3,N,Tv,Ti}) where {N,Tv,Ti}
     face_list = list_faces_with_element(mesh)
     radix_sort!(face_list, nnodes(mesh), 3)
     remove_singletons!(face_list)
     return compress(face_list)
 end
+
+# Fallback for 2D meshes without faces :)
+face_to_elements(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti} = empty_map(3, Ti)
 
 """
     list_faces_with_element(mesh) -> Vector{CellToEl}
@@ -145,6 +154,18 @@ function list_edges_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     return edge_list
 end
 
+function list_edges_with_element(mesh::Tris{Tv,Ti}) where {Tv,Ti}
+    edge_list = Vector{EdgeToEl{Ti}}(3 * nelements(mesh))
+    idx = 1
+    @inbounds for (el_idx, el) in enumerate(mesh.elements)
+        edge_list[idx + 0] = EdgeToEl{Ti}((el[1], el[2]), ElementId(el_idx, 1))
+        edge_list[idx + 1] = EdgeToEl{Ti}((el[1], el[3]), ElementId(el_idx, 2))
+        edge_list[idx + 2] = EdgeToEl{Ti}((el[2], el[3]), ElementId(el_idx, 3))
+        idx += 3
+    end
+    return edge_list
+end
+
 """
     list_nodes_with_element(mesh) -> Vector{CellToEl}
 
@@ -163,11 +184,25 @@ function list_nodes_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     return node_list
 end
 
+function list_nodes_with_element(mesh::Tris{Tv,Ti}) where {Tv,Ti}
+    node_list = Vector{NodeToEl{Ti}}(3 * nelements(mesh))
+    idx = 1
+    @inbounds for (el_idx, el) in enumerate(mesh.elements)
+        node_list[idx + 0] = NodeToEl{Ti}((el[1],), ElementId(el_idx, 1))
+        node_list[idx + 1] = NodeToEl{Ti}((el[2],), ElementId(el_idx, 2))
+        node_list[idx + 2] = NodeToEl{Ti}((el[3],), ElementId(el_idx, 3))
+        idx += 3
+    end
+    return node_list
+end
+
+
 """
-    list_boundary_nodes_edges_faces(m::Tets) -> NTuple{3,SparseCellToElementMap}
+    list_boundary_nodes_edges_faces(m::Mesh) -> NTuple{3,SparseCellToElementMap}
 
 For a given input mesh we return sparse mappings from face, cell and node on the
-boundary to the element with the local face, cell and node number.
+boundary to the element with the local face, cell and node number. In the case
+of Tris we just return an empty map sparse map for the faces.
 """
 function list_boundary_nodes_edges_faces(m::Tets{Tv,Ti}) where {Tv,Ti}
 
@@ -218,6 +253,34 @@ function list_boundary_nodes_edges_faces(m::Tets{Tv,Ti}) where {Tv,Ti}
     intersect!(nodes, boundary_nodes)
 
     return compress(nodes), compress(edges), compress(faces)
+end
+
+function list_boundary_nodes_edges_faces(m::Tris{Tv,Ti}) where {Tv,Ti}
+
+    # Find the boundary edges
+    edges = list_edges_with_element(m)
+    radix_sort!(edges, nnodes(m), 2)
+    remove_repeated_pairs!(edges)
+
+    # Convert to sorted list of boundary nodes
+    boundary_nodes = Vector{Tuple{Ti,Ti}}(2 * length(edges))
+
+    idx = 1
+    @inbounds for edge in edges
+        boundary_nodes[idx + 0] = (edge.nodes[1],)
+        boundary_nodes[idx + 1] = (edge.nodes[2],)
+        idx += 2
+    end
+
+    radix_sort!(boundary_nodes, nnodes(m), 1)
+    remove_duplicates!(boundary_nodes)
+
+    # List all nodes
+    nodes = list_nodes_with_element(m)
+    radix_sort!(nodes, nnodes(m), 1)
+    intersect!(nodes, boundary_nodes)
+
+    return compress(nodes), compress(edges), empty_map(3, Ti)
 end
 
 """
