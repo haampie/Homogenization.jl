@@ -3,54 +3,54 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
                nodes_on_ref_edges, interfaces, face_to_elements, edge_to_elements,
                nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
-               get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
+               get_reference_normals, Tet, Tri, node_to_elements, ImplicitFineGrid,
                construct_full_grid, ZeroDirichletConstraint, list_boundary_nodes_edges_faces,
                refined_mesh, apply_constraint!, cell_type, default_quad, ElementValues,
                update_det_J, update_inv_J, reinit!, get_inv_jac, get_det_jac, distribute!, 
                broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
                list_interior_nodes, assemble_matrix, BaseLevel, zero_out_all_but_one!,
-               local_rhs!, assemble_vector, local_residual!
+               local_rhs!, assemble_vector, local_residual!, ElementType
 
-function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
+function simple_mesh(::Type{<:Tet})
     # Unit cube
-    nodes = SVector{3,Float64}[
-        (0,0,0),
-        (1,0,0),
-        (0,1,0),
-        (1,1,0),
-        (0,0,1),
-        (1,0,1),
-        (0,1,1),
-        (1,1,1)
-    ]
+    nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
 
     # Perturb things a bit.
     map!(x -> x .+ randn(3) / 20, nodes, nodes)
     
     # Split in tetrahedra
-    elements = [
-        (1,2,3,5),
-        (2,3,4,8),
-        (3,5,7,8),
-        (2,5,6,8),
-        (2,3,5,8)
-    ]
+    elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
 
+    Mesh(nodes, elements)
+end
+
+function simple_mesh(::Type{<:Tri})
+    # Unit square
+    nodes = SVector{2,Float64}[(0,0),(1,0),(0,1),(1,1)]
+
+    # Perturb things a bit.
+    map!(x -> x .+ randn(2) / 20, nodes, nodes)
+    
+    # Split in tets
+    elements = [(1,2,3),(2,3,4)]
+
+    Mesh(nodes, elements)
+end
+
+function test_matrix_vector_product(T::Type{<:ElementType} = Tet, total_levels = 2)
     # Build a multilevel grid
-    implicit = ImplicitFineGrid(Mesh(nodes, elements), total_levels)
+    implicit = ImplicitFineGrid(simple_mesh(T), total_levels)
 
     # Operators for each level
     ops = build_local_operators(implicit.reference)
 
     # Verify things on this grid
-    finest = refined_mesh(implicit, inspect_level)
-    
-    # Find the number of nodes per element at level `inspect_level`
-    nodes_per_element = nnodes(refined_mesh(implicit, inspect_level))
+    finest = refined_mesh(implicit, total_levels)
+    nodes_per_element = nnodes(refined_mesh(implicit, total_levels))
 
     x_base = map(x -> 1 - sum(x), implicit.base.nodes)
 
-    x_distributed = zeros(4, nelements(implicit.base))
+    x_distributed = zeros(nnodes(refined_mesh(implicit, 1)), nelements(implicit.base))
     
     # Distribute the unknowns
     distribute!(x_distributed, x_base, implicit)
@@ -61,52 +61,37 @@ function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
     end
 
     # Output matrix is y.
-    y_distributed = Matrix{Float64}(nodes_per_element, nelements(implicit.base))
+    y_distributed = zeros(nodes_per_element, nelements(implicit.base))
 
     # Apply the operator on each base element (y ← A * x)
-    A_mul_B!(1.0, implicit.base, ops[inspect_level], x_distributed, y_distributed)
+    A_mul_B!(1.0, implicit.base, ops[total_levels], x_distributed, y_distributed)
+
+    @show implicit.reference.numbering[total_levels].edges_interior
 
     # Accumulate the values along the interfaces and store them locally.
-    broadcast_interfaces!(y_distributed, implicit, inspect_level)
+    broadcast_interfaces!(y_distributed, implicit, total_levels)
 
-    # Construct the full grid (expensive if `inspect_level` is large)
-    fine_mesh = construct_full_grid(implicit, inspect_level)
+    # Construct the full grid
+    fine_mesh = construct_full_grid(implicit, total_levels)
 
     # Save the full grid
     vtk = vtk_grid("multiplication", fine_mesh) do vtk
         vtk_point_data(vtk, reshape(x_distributed, :), "x")
         vtk_point_data(vtk, reshape(y_distributed, :), "A * u")
     end
-    
 end
 
-function test_multigrid(total_levels = 5, iterations = 25, debug = false)
+function test_multigrid(total_levels = 2, iterations = 25, debug = false)
     # Unit cube
-    nodes = SVector{3,Float64}[
-        (0,0,0),
-        (1,0,0),
-        (0,1,0),
-        (1,1,0),
-        (0,0,1),
-        (1,0,1),
-        (0,1,1),
-        (1,1,1)
-    ]
+    nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
+    elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
 
-    # Perturb things a bit.
-    # map!(x -> x .+ randn(3) / 50, nodes, nodes)
-    
-    # Split in tetrahedra
-    elements = [
-        (1,2,3,5),
-        (2,3,4,8),
-        (3,5,7,8),
-        (2,5,6,8),
-        (2,3,5,8)
-    ]
+    # Unit square
+    # nodes = SVector{2,Float64}[(0,0),(1,0),(0,1),(1,1)]
+    # elements = [(1,2,3),(2,3,4)]
 
     # Factorize the coarse grid operator.
-    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 3)
+    coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 4)
     sort_element_nodes!(coarse_mesh.elements)
     interior = list_interior_nodes(coarse_mesh)
     Ac = assemble_matrix(coarse_mesh, dot)
@@ -134,6 +119,22 @@ function test_multigrid(total_levels = 5, iterations = 25, debug = false)
         LevelOperator(op, constraint)
     end
 
+    ## BUILD FULL A
+    # let 
+    #     finegrid = refine_uniformly(coarse_mesh, times = total_levels - 1)
+    #     sort_element_nodes!(finegrid.element)
+    #     interiornodes = list_interior_nodes(finegrid)
+    #     fullA = assemble_matrix(finegrid, dot)[interiornodes,interiornodes]
+    #     fullb = assemble_vector(finegrid, identity)[interiornodes]
+    #     fullx = zeros(nnodes(finegrid))
+    #     fullx[interiornodes] .= fullA \ fullb
+
+    #     vtk_grid("mg_0", finegrid) do vtk
+    #         vtk_point_data(vtk, fullx, "x")
+    #     end
+    # end
+    ## END BUILD FULL A
+
     # x is initially random with values matching on the interfaces and 0 on the boundary
     finest_level = level_states[total_levels]
 
@@ -144,28 +145,33 @@ function test_multigrid(total_levels = 5, iterations = 25, debug = false)
 
     # b is just ones and matching on the interfaces.
     local_rhs!(finest_level.b, implicit)
-    apply_constraint!(finest_level.b, total_levels, constraint, implicit)
 
-    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0] / 1.1
+    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0]
+    # ωs = [0.2, 0.2, 0.2, 0.2, 0.2]
 
     # Do a v-cycle :tada:
     residuals = Float64[]
     for i = 1 : iterations
         vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, debug)
-        # local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
-        # broadcast_interfaces!(finest_level.r, implicit, total_levels)
-        # zero_out_all_but_one!(finest_level.r, implicit, total_levels)
-        # push!(residuals, vecnorm(finest_level.r))
-        # @show last(residuals)
+        local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
+        broadcast_interfaces!(finest_level.r, implicit, total_levels)
+        zero_out_all_but_one!(finest_level.r, implicit, total_levels)        
+        push!(residuals, vecnorm(finest_level.r))
+        @show last(residuals)
     end
+
+    # return finest_level.r
 
     for lvl = 1 : total_levels
         fine_mesh = construct_full_grid(implicit, lvl)
         states = level_states[lvl]
         vtk = vtk_grid("mg_$lvl", fine_mesh) do vtk
+            println("Saving to mg_$lvl.vtu")
             vtk_point_data(vtk, reshape(states.r, :), "r")
             vtk_point_data(vtk, reshape(states.x, :), "x")
-            vtk_point_data(vtk, reshape(states.b, :), "b")
+            vtk_point_data(vtk, states.b[:], "b")
+            broadcast_interfaces!(states.b, implicit, lvl)
+            vtk_point_data(vtk, states.b[:], "b broadcasted")
         end
     end
 

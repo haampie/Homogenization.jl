@@ -15,8 +15,8 @@ Construct a new state wrapper.
 """
 function LevelState(total_base_elements::Int, total_fine_nodes::Int, Tv::Type{<:Number})
     x = zeros(Tv, total_fine_nodes, total_base_elements)
-    b = similar(x)
-    r = similar(x)
+    b = zeros(x)
+    r = zeros(x)
     LevelState{Tv,typeof(x)}(x, b, r)
 end
 
@@ -77,11 +77,13 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
     if k == 1
         broadcast_interfaces!(levels[1].b, implicit, 1)
 
+        fill!(base.b, 0.0)
+
         # Use the global numbering again.
         copy_to_base!(base.b, levels[1].b, implicit)
 
         # Copy the interior over.
-        base.b_interior .= base.b[base.interior_nodes]
+        copy!(base.b_interior, view(base.b, base.interior_nodes))
         
         # Unfortunately this allocates :s
         tmp = base.A_inv \ base.b_interior
@@ -108,7 +110,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
 
         # Restrict: bₖ₋₁ ← Pᵀrₖ
         restrict_to!(next.b, P, curr.r)
-        apply_constraint!(next.b, k - 1, ops[k - 1].bc, implicit)
+        fill!(next.x, 0.0)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
         vcycle!(implicit, base, ops, levels, ωs, k - 1, debug)

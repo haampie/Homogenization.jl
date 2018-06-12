@@ -182,16 +182,16 @@ end
 function get_local_numbering(m::Tris{Tv}) where {Tv}
     # First collect the nodes on all three edges
     edge_to_nodes = nodes_on_ref_edges(m)
-    nodes_to_nodes = collect(1:4)
+    nodes_to_nodes = collect(1:3)
     interior_edge_to_nodes = deepcopy(edge_to_nodes)
 
     # Remove the end points from the edges
-    for i = 1 : 6
+    for i = 1 : 3
         left_minus_right!(interior_edge_to_nodes[i], nodes_to_nodes)
     end
 
-    face_to_nodes = Int[]
-    interior_face_to_nodes = Int[]
+    face_to_nodes = [Int[]]
+    interior_face_to_nodes = [Int[]]
 
     return ReferenceNumbering(
         face_to_nodes,

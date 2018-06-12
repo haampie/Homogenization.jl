@@ -39,7 +39,7 @@ empty_map(N::Int, Ti::Type{<:Integer} = Int) = SparseCellToElementMap{N,Int}(
     Ti[],
     Vector{NTuple{N,Ti}}(),
     Vector{ElementId{Ti}}()
-end
+)
 
 """
 Return the value indices range of cell `i`
@@ -263,7 +263,7 @@ function list_boundary_nodes_edges_faces(m::Tris{Tv,Ti}) where {Tv,Ti}
     remove_repeated_pairs!(edges)
 
     # Convert to sorted list of boundary nodes
-    boundary_nodes = Vector{Tuple{Ti,Ti}}(2 * length(edges))
+    boundary_nodes = Vector{Tuple{Ti}}(2 * length(edges))
 
     idx = 1
     @inbounds for edge in edges
