@@ -80,7 +80,7 @@ function test_matrix_vector_product(total_levels = 2, inspect_level = 2)
     
 end
 
-function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debug = false)
+function test_multigrid(total_levels = 5, iterations = 25, debug = false)
     # Unit cube
     nodes = SVector{3,Float64}[
         (0,0,0),
@@ -117,7 +117,7 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
     # Build a multilevel grid
     implicit = ImplicitFineGrid(coarse_mesh, total_levels)
 
-    # @show implicit
+    @show implicit
     
     # Dirichlet condition
     nodes, edges, faces = list_boundary_nodes_edges_faces(implicit.base)
@@ -146,28 +146,28 @@ function test_multigrid(total_levels = 5, store_level = 3, iterations = 25, debu
     local_rhs!(finest_level.b, implicit)
     apply_constraint!(finest_level.b, total_levels, constraint, implicit)
 
-    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0] / 1.5
+    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0] / 1.1
 
     # Do a v-cycle :tada:
     residuals = Float64[]
     for i = 1 : iterations
         vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, debug)
-        local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
-        broadcast_interfaces!(finest_level.r, implicit, total_levels)
-        zero_out_all_but_one!(finest_level.r, implicit, total_levels)
-        push!(residuals, vecnorm(finest_level.r))
+        # local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
+        # broadcast_interfaces!(finest_level.r, implicit, total_levels)
+        # zero_out_all_but_one!(finest_level.r, implicit, total_levels)
+        # push!(residuals, vecnorm(finest_level.r))
         # @show last(residuals)
     end
 
-    fine_mesh = construct_full_grid(implicit, store_level)
-
-    # Save the full grid
-    # vtk = vtk_grid("multigridstuff", fine_mesh) do vtk
-    #     vtk_point_data(vtk, reshape(level_states[store_level].r, :), "r")
-    #     vtk_point_data(vtk, reshape(level_states[store_level].x, :), "x")
-    #     vtk_point_data(vtk, reshape(level_states[store_level].b, :), "b")
-    #     vtk_cell_data(vtk, repeat(1 : nelements(coarse_mesh), inner = nelements(refined_mesh(implicit, store_level))), "elements")
-    # end    
+    for lvl = 1 : total_levels
+        fine_mesh = construct_full_grid(implicit, lvl)
+        states = level_states[lvl]
+        vtk = vtk_grid("mg_$lvl", fine_mesh) do vtk
+            vtk_point_data(vtk, reshape(states.r, :), "r")
+            vtk_point_data(vtk, reshape(states.x, :), "x")
+            vtk_point_data(vtk, reshape(states.b, :), "b")
+        end
+    end
 
     return residuals
 end

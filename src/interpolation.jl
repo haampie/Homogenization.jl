@@ -69,6 +69,6 @@ end
 
 function _restrict_to(y::AbstractMatrix, P, x::AbstractMatrix, id::Int)
     @inbounds for col = id : nthreads() : size(x, 2)
-        At_mul_B!(view(y, :, col), 1, view(x, :, col))
+        At_mul_B!(view(y, :, col), P, view(x, :, col))
     end
 end

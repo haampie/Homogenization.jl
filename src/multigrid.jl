@@ -95,7 +95,8 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         # Distribute the values to the implicit grid again.
         distribute!(levels[1].x, base.b, implicit)
     else
-        curr, next = levels[k], levels[k - 1]
+        curr = levels[k]
+        next = levels[k - 1]
         P = implicit.reference.interops[k - 1]
 
         # Smooth
