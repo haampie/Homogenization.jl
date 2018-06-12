@@ -20,12 +20,11 @@ cell_type(m::Mesh{2,3,Tv}) where {Tv} = Tri{Tv}
 cell_type(m::Mesh{3,4,Tv}) where {Tv} = Tet{Tv}
 
 function get_reference_nodes(::Type{Tet{Tv}}) where {Tv}
-    return (
-        SVector{3,Tv}(0,0,0),
-        SVector{3,Tv}(1,0,0),
-        SVector{3,Tv}(0,1,0),
-        SVector{3,Tv}(0,0,1)
-    )
+    return (SVector{3,Tv}(0,0,0),SVector{3,Tv}(1,0,0),SVector{3,Tv}(0,1,0),SVector{3,Tv}(0,0,1))
+end
+
+function get_reference_nodes(::Type{Tri{Tv}}) where {Tv}
+    return (SVector{3,Tv}(0,0),SVector{3,Tv}(1,0),SVector{3,Tv}(0,1))
 end
 
 function get_reference_normals(::Type{Tet{Tv}}) where {Tv}

@@ -65,7 +65,15 @@ function nodes_on_ref_faces(m::Tets{Tv}) where {Tv}
         find(x -> x[3] == 0, m.nodes),
         find(x -> x[2] == 0, m.nodes),
         find(x -> x[1] == 0, m.nodes),
-        find(x -> x[1] + x[2] + x[3] ≥ 1 - 10 * eps(Tv), m.nodes)
+        find(x -> x[1] + x[2] + x[3] ≥ 1 - 10 * eps(Tv), m.nodes) # rounding errors!
+    ]
+end
+
+function nodes_on_ref_edges(m::Tris{Tv}) where {Tv}
+    return [
+        find(x -> x[2] == 0, m.nodes),
+        find(x -> x[1] == 0, m.nodes),
+        find(x -> x[1] + x[2] ≥ 1 - 10 * eps(Tv), m.nodes) # rounding errors!
     ]
 end
 
@@ -111,7 +119,8 @@ end
     get_local_numbering(mesh::Tets) -> ReferenceNumbering
 
 Get the indices of the nodes in (the interior of) the faces, the edges and the 
-corner points.
+corner points. There's probably a cheaper way to do it by keeping track of
+them during consecutive refinements, but well...
 """
 function get_local_numbering(m::Tets{Tv}) where {Tv}
     # First collect the nodes on all four faces.
@@ -160,6 +169,29 @@ function get_local_numbering(m::Tets{Tv}) where {Tv}
     for i = 1 : 6
         left_minus_right!(interior_edge_to_nodes[i], nodes_to_nodes)
     end
+
+    return ReferenceNumbering(
+        face_to_nodes,
+        interior_face_to_nodes,
+        edge_to_nodes,
+        interior_edge_to_nodes,
+        nodes_to_nodes
+    )
+end
+
+function get_local_numbering(m::Tris{Tv}) where {Tv}
+    # First collect the nodes on all three edges
+    edge_to_nodes = nodes_on_ref_edges(m)
+    nodes_to_nodes = collect(1:4)
+    interior_edge_to_nodes = deepcopy(edge_to_nodes)
+
+    # Remove the end points from the edges
+    for i = 1 : 6
+        left_minus_right!(interior_edge_to_nodes[i], nodes_to_nodes)
+    end
+
+    face_to_nodes = Int[]
+    interior_face_to_nodes = Int[]
 
     return ReferenceNumbering(
         face_to_nodes,

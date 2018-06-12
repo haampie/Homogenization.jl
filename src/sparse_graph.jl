@@ -22,8 +22,8 @@ function edge_graph(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     ptr = zeros(Ti, Nn + 1)
 
     # Count edges per node
-    @inbounds for tet in mesh.elements, i = 1 : N, j = i + 1 : N
-        from, = sort_bitonic((tet[i], tet[j]))
+    @inbounds for element in mesh.elements, i = 1 : N, j = i + 1 : N
+        from, = sort_bitonic((element[i], element[j]))
         ptr[from + Ti(1)] += Ti(1)
     end
 
@@ -37,8 +37,8 @@ function edge_graph(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     adj = Vector{Ti}(ptr[end] - 1)
     indices = copy(ptr)
 
-    @inbounds for tet in mesh.elements, i = 1 : N, j = i + 1 : N
-        from, to = sort_bitonic((tet[i], tet[j]))
+    @inbounds for element in mesh.elements, i = 1 : N, j = i + 1 : N
+        from, to = sort_bitonic((element[i], element[j]))
         # @assert from < to
         adj[indices[from]] = to
         indices[from] += 1
