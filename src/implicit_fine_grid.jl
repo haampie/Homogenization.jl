@@ -94,18 +94,20 @@ edges and nodes to zero them out.
 function apply_constraint!(x::Matrix{Tv}, level::Int, z::ZeroDirichletConstraint{Ti}, implicit::ImplicitFineGrid{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     numbering = local_numbering(implicit, level)
 
-    # FACES
-    @inbounds for i = 1 : length(z.faces.cells), j = valrange(z.faces, i)
+    if dim == 3
+        # FACES
+        @inbounds for i = 1 : length(z.faces.cells), j = valrange(z.faces, i)
 
-        # Get the global element id
-        value = z.faces.values[j]
+            # Get the global element id
+            value = z.faces.values[j]
 
-        # Find the local numbering
-        nodes = numbering.faces_interior[value.local_id]
+            # Find the local numbering
+            nodes = numbering.faces_interior[value.local_id]
 
-        # Add the values to the buffer
-        for node in nodes
-            x[node, value.element] = zero(Tv)
+            # Add the values to the buffer
+            for node in nodes
+                x[node, value.element] = zero(Tv)
+            end
         end
     end
 
@@ -204,45 +206,47 @@ end
 
 Sums the values of `x` along the boundary and updates it locally.
 """
-function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid, level::Int) where {Tv}
+function broadcast_interfaces!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid{dim,N,Tv,Ti}, level::Int) where {dim,N,Tv,Ti}
 
     local_numbering = implicit.reference.numbering[level]
 
-    # FACES
-    nodes_per_face = nodes_per_face_interior(implicit.reference, level)
+    if dim == 3
+        # FACES
+        nodes_per_face = nodes_per_face_interior(implicit.reference, level)
 
-    let buffer = zeros(Tv, nodes_per_face)
-        face_to_element = implicit.interfaces.faces
-        @inbounds for i = 1 : length(face_to_element.cells)
-            fill!(buffer, zero(Tv))
+        let buffer = zeros(Tv, nodes_per_face)
+            face_to_element = implicit.interfaces.faces
+            @inbounds for i = 1 : length(face_to_element.cells)
+                fill!(buffer, zero(Tv))
 
-            # Reduce
-            for j = valrange(face_to_element, i)
+                # Reduce
+                for j = valrange(face_to_element, i)
 
-                # Get the global element id
-                value = face_to_element.values[j]
+                    # Get the global element id
+                    value = face_to_element.values[j]
 
-                # Find the local numbering
-                nodes = local_numbering.faces_interior[value.local_id]
+                    # Find the local numbering
+                    nodes = local_numbering.faces_interior[value.local_id]
 
-                # Add the values to the buffer
-                for k = 1 : nodes_per_face
-                    buffer[k] += x[nodes[k], value.element]
+                    # Add the values to the buffer
+                    for k = 1 : nodes_per_face
+                        buffer[k] += x[nodes[k], value.element]
+                    end
                 end
-            end
 
-            # Broadcast
-            for j = valrange(face_to_element, i)
+                # Broadcast
+                for j = valrange(face_to_element, i)
 
-                # Get the global element id
-                value = face_to_element.values[j]
+                    # Get the global element id
+                    value = face_to_element.values[j]
 
-                # Find the local numbering
-                nodes = local_numbering.faces_interior[value.local_id]
+                    # Find the local numbering
+                    nodes = local_numbering.faces_interior[value.local_id]
 
-                # Overwrite with the sum.
-                for k = 1 : nodes_per_face
-                    x[nodes[k], value.element] = buffer[k]
+                    # Overwrite with the sum.
+                    for k = 1 : nodes_per_face
+                        x[nodes[k], value.element] = buffer[k]
+                    end
                 end
             end
         end
@@ -327,23 +331,26 @@ end
 If a node is shared among multiple multiple coarse elements, we will zero out
 all of them except in the first listed element.
 """
-function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid, level::Int) where {Tv}
+function zero_out_all_but_one!(x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid{dim,N,Tv,Ti}, level::Int) where {dim,N,Tv,Ti}
 
     local_numbering = implicit.reference.numbering[level]
 
-    # FACES
-    nodes_per_face = nodes_per_face_interior(implicit.reference, level)
-    face_to_element = implicit.interfaces.faces
-    @inbounds for i = 1 : length(face_to_element.cells), j = face_to_element.offset[i] + 1 : face_to_element.offset[i + 1] - 1
-        # Get the global element id
-        value = face_to_element.values[j]
+    if dim == 3
 
-        # Find the local numbering
-        nodes = local_numbering.faces_interior[value.local_id]
+        # FACES
+        nodes_per_face = nodes_per_face_interior(implicit.reference, level)
+        face_to_element = implicit.interfaces.faces
+        @inbounds for i = 1 : length(face_to_element.cells), j = face_to_element.offset[i] + 1 : face_to_element.offset[i + 1] - 1
+            # Get the global element id
+            value = face_to_element.values[j]
 
-        # Add the values to the buffer
-        for k = 1 : nodes_per_face
-            x[nodes[k], value.element] = zero(Tv)
+            # Find the local numbering
+            nodes = local_numbering.faces_interior[value.local_id]
+
+            # Add the values to the buffer
+            for k = 1 : nodes_per_face
+                x[nodes[k], value.element] = zero(Tv)
+            end
         end
     end
 
@@ -399,90 +406,4 @@ function local_rhs!(b::AbstractMatrix, implicit::ImplicitFineGrid{dim,N,Tv,Ti}) 
         reinit!(element_values, base, element)
         b[:, idx] .= b_ref .* get_det_jac(element_values)
     end
-end
-
-
-
-"""
-    full_grid_without_duplicates(g::ImplicitFineGrid, level::Int) -> Mesh
-
-Builds the full mesh at a certain level with elements on the interfaces occurring
-just once. Be very scared, cause the number of nodes gets large! There are still
-duplicate nodes though, but we don't care.
-"""
-function full_grid_without_duplicates(g::ImplicitFineGrid{dim,N,Tv,Ti}, level::Int) where {dim,N,Tv,Ti}
-    base = base_mesh(g)
-    ref_mesh = refined_mesh(g, level)
-
-    # Since we copy nodes on the interface, we have #coarse * #ref nodes & elements
-    total_nodes = nelements(base) * nnodes(ref_mesh)
-    total_elements = nelements(base) * nelements(ref_mesh)
-
-    nodes = Vector{SVector{dim,Tv}}(total_nodes)
-    elements = Matrix{NTuple{N,Ti}}(total_elements)
-
-    # Now for each base element we simply apply the coordinate transform to each
-    # node, and we copy over each fine element. We only have to renumber the
-    # fine elements by the offset of the base element number.
-
-    node_idx = 0
-    element_idx = 0
-    offset = 0
-
-    @inbounds for element in base.elements
-        # Get the coordinate mapping
-        J, b = affine_map(base, element)
-        
-        # Copy the transformed nodes over
-        for node in ref_mesh.nodes
-            nodes[node_idx += 1] = J * node + b
-        end
-
-        # Copy over the elements
-        for element in ref_mesh.elements
-            elements[element_idx += 1] = element .+ offset
-        end
-
-        offset += nnodes(ref_mesh)
-    end
-
-    # Fix the repeated nodes, edges & faces.
-    local_numbering = implicit.reference.numbering[level]
-
-    # FACES
-    f2e = implicit.interfaces.faces
-
-    @inbounds for i = 1 : length(f2e.cells)
-
-        # Get the first face.
-        value = f2e.values[f2e.offset[i]]
-
-        # Get the element indices of this face
-        face_idxs = face_indices(cell_type(g), value.local_id)
-
-        # Get the node numbers that make up this face.
-        face_node_numbers = get_node_numbers(ref_mesh, value.element, face_idxs)
-        
-        # Overwrite the other faces with these node numbers
-        for j = f2e.offset[i] + 1 : f2e.offset[i + 1] - 1
-            # Get the global element id
-            value_ = f2e.values[j]
-
-            # Find the local numbering
-            face_idxs_ = face_indices(cell_type(g), value.local_id)
-
-            # Current element id.
-            el_ = value.element
-
-            offset_ = (nnodes(ref_mesh) - 1) * el_ + el_
-
-            # Overwrite the face
-            for k in face_idxs_
-                elements[]
-            end
-
-        end
-    end
-
-    return Mesh(nodes, elements)
 end
