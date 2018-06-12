@@ -20,7 +20,7 @@ function build_local_operators(ref::MultilevelReference{dim,N,Tv,Ti}) where {dim
     return ∫ϕₓᵢϕₓⱼs
 end
 
-function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
+function _build_local_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     cell = cell_type(mesh)
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
@@ -29,15 +29,14 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     Nt = nelements(mesh)
     Nn = nnodes(mesh)
     Nq = nquadpoints(quadrature)
-    N = 4
         
     # We'll pre-allocate the triples (is, js, vs)
-    Is = [Vector{Ti}(N * N * Nt) for i = 1 : 9]
-    Js = [Vector{Ti}(N * N * Nt) for i = 1 : 9]
-    Vs = [Vector{Tv}(N * N * Nt) for i = 1 : 9]
+    Is = [Vector{Ti}(N * N * Nt) for i = 1 : dim * dim]
+    Js = [Vector{Ti}(N * N * Nt) for i = 1 : dim * dim]
+    Vs = [Vector{Tv}(N * N * Nt) for i = 1 : dim * dim]
     
     # The local system matrix
-    A_locals = [zeros(N, N) for i = 1 : 9]
+    A_locals = [zeros(N, N) for i = 1 : dim * dim]
 
     idx = 1
 
@@ -46,7 +45,7 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
         reinit!(element_values, mesh, element)
 
         # Reset local matrices
-        for i = 1 : 9
+        for i = 1 : dim * dim
             fill!(A_locals[i], zero(Tv))
         end
 
@@ -55,8 +54,8 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
             ∇ϕᵢ = get_grad(element_values, i)
             ∇ϕⱼ = get_grad(element_values, j)
 
-            for k = 1 : 3, l = 1 : 3
-                A_locals[(k - 1) * 3 + l][i,j] += weights[qp] * ∇ϕᵢ[k] * ∇ϕⱼ[l]
+            for k = 1 : dim, l = 1 : dim
+                A_locals[(k - 1) * dim + l][i,j] += weights[qp] * ∇ϕᵢ[k] * ∇ϕⱼ[l]
             end
         end
 
@@ -64,7 +63,7 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
         @inbounds for i = 1:N, j = 1:N
             det = get_det_jac(element_values)
 
-            for k = 1 : 9
+            for k = 1 : dim * dim
                 Is[k][idx] = element[i]
                 Js[k][idx] = element[j]
                 Vs[k][idx] = A_locals[k][i,j] * det
@@ -74,7 +73,7 @@ function _build_local_operators(mesh::Tets{Tv,Ti}) where {Tv,Ti}
     end
 
     # Build the sparse matrix
-    ∫ϕₓᵢϕₓⱼ(SMatrix{3,3,SparseMatrixCSC{Tv,Ti},9}(Tuple(dropzeros!(sparse(Is[i], Js[i], Vs[i], Nn, Nn)) for i = 1 : 9)))
+    ∫ϕₓᵢϕₓⱼ(SMatrix{dim,dim,SparseMatrixCSC{Tv,Ti},dim*dim}(Tuple(dropzeros!(sparse(Is[i], Js[i], Vs[i], Nn, Nn)) for i = 1 : dim*dim)))
 end
 
 """
@@ -111,7 +110,7 @@ function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Me
         offset = (el_idx - 1) * size(x, 1)
 
         # Apply the ops finally.
-        for i = 1 : 3, j = 1 : 3
+        for i = 1 : dim, j = 1 : dim
             scalar = α * P[i, j] * detJ
             scalar == 0 && continue
             my_A_mul_B!(scalar, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], x, y, offset)
