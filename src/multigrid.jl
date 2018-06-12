@@ -73,7 +73,7 @@ function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, cur
     axpy!(ω, curr.r, curr.x)
 end
 
-function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LevelOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int, debug::Bool = false)
+function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LevelOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int)
     if k == 1
         broadcast_interfaces!(levels[1].b, implicit, 1)
 
@@ -113,7 +113,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         fill!(next.x, 0.0)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
-        vcycle!(implicit, base, ops, levels, ωs, k - 1, debug)
+        vcycle!(implicit, base, ops, levels, ωs, k - 1)
 
         # Interpolate: xₖ ← xₖ + Pxₖ₋₁
         interpolate_and_sum_to!(curr.x, P, next.x)

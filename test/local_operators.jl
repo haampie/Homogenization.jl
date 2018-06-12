@@ -81,7 +81,7 @@ function test_matrix_vector_product(T::Type{<:ElementType} = Tet, total_levels =
     end
 end
 
-function test_multigrid(total_levels = 2, iterations = 25, debug = false)
+function test_multigrid(total_levels = 2, iterations = 25, save_base_level = false)
     # Unit cube
     nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
     elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
@@ -92,6 +92,7 @@ function test_multigrid(total_levels = 2, iterations = 25, debug = false)
 
     # Factorize the coarse grid operator.
     coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 4)
+    println("Building the coarse grid operator")
     sort_element_nodes!(coarse_mesh.elements)
     interior = list_interior_nodes(coarse_mesh)
     Ac = assemble_matrix(coarse_mesh, dot)
@@ -100,6 +101,7 @@ function test_multigrid(total_levels = 2, iterations = 25, debug = false)
     base_level = BaseLevel(Float64, F, nnodes(coarse_mesh), interior)
 
     # Build a multilevel grid
+    println("Building the implicit fine grid stuff")
     implicit = ImplicitFineGrid(coarse_mesh, total_levels)
 
     @show implicit
@@ -109,12 +111,14 @@ function test_multigrid(total_levels = 2, iterations = 25, debug = false)
     constraint = ZeroDirichletConstraint(nodes, edges, faces)
 
     # Allocate the x's, r's and b's.
+    println("Allocating some x's, b's and r's")
     level_states = map(1 : total_levels) do i
         mesh = refined_mesh(implicit, i)
         LevelState(nelements(base_mesh(implicit)), nnodes(mesh), Float64)
     end
 
     # Build the operators
+    println("Building the local operators")
     level_operators = map(build_local_operators(implicit.reference)) do op
         LevelOperator(op, constraint)
     end
@@ -146,33 +150,39 @@ function test_multigrid(total_levels = 2, iterations = 25, debug = false)
     # b is just ones and matching on the interfaces.
     local_rhs!(finest_level.b, implicit)
 
-    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0]
+    ωs = [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0] ./ 0.9
     # ωs = [0.2, 0.2, 0.2, 0.2, 0.2]
 
+    tmpgrid = construct_full_grid(implicit, 1)
+    pvd = paraview_collection("my_pvd_file")
+
     # Do a v-cycle :tada:
+    println("Starting the v-cycles; note that the residual norm lags one step behind to avoid another expensive mv-product!")
     residuals = Float64[]
     for i = 1 : iterations
-        vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels, debug)
-        local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
-        broadcast_interfaces!(finest_level.r, implicit, total_levels)
+        vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels)
+
+        if save_base_level
+            let
+                println("Saving to step_$(lpad(i,3,0)).vtu")
+                vtk = vtk_grid("step_$(lpad(i,3,0))", tmpgrid)
+                n = nnodes(refined_mesh(implicit, 1))
+                vtk_point_data(vtk, level_states[end].r[1 : n, :], "r")
+                vtk_point_data(vtk, level_states[end].x[1 : n, :], "x")
+                vtk_save(vtk)
+                collection_add_timestep(pvd, vtk, float(i))
+            end
+        end
+
+        # local_residual!(implicit, level_operators[total_levels], finest_level, total_levels)
+        # broadcast_interfaces!(finest_level.r, implicit, total_levels)
         zero_out_all_but_one!(finest_level.r, implicit, total_levels)        
         push!(residuals, vecnorm(finest_level.r))
         @show last(residuals)
     end
 
-    # return finest_level.r
-
-    for lvl = 1 : total_levels
-        fine_mesh = construct_full_grid(implicit, lvl)
-        states = level_states[lvl]
-        vtk = vtk_grid("mg_$lvl", fine_mesh) do vtk
-            println("Saving to mg_$lvl.vtu")
-            vtk_point_data(vtk, reshape(states.r, :), "r")
-            vtk_point_data(vtk, reshape(states.x, :), "x")
-            vtk_point_data(vtk, states.b[:], "b")
-            broadcast_interfaces!(states.b, implicit, lvl)
-            vtk_point_data(vtk, states.b[:], "b broadcasted")
-        end
+    if save_base_level
+        vtk_save(pvd)
     end
 
     return residuals
