@@ -77,8 +77,6 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
     if k == 1
         broadcast_interfaces!(levels[1].b, implicit, 1)
 
-        fill!(base.b, 0.0)
-
         # Use the global numbering again.
         copy_to_base!(base.b, levels[1].b, implicit)
 
@@ -102,7 +100,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         P = implicit.reference.interops[k - 1]
 
         # Smooth
-        for i = 1 : 1
+        for i = 1 : 2
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
         end
 
@@ -119,7 +117,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         interpolate_and_sum_to!(curr.x, P, next.x)
 
         # Smooth
-        for i = 1 : 1
+        for i = 1 : 2
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
         end
     end

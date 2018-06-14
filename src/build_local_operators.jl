@@ -111,9 +111,7 @@ function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Me
 
         # Apply the ops finally.
         for i = 1 : dim, j = 1 : dim
-            scalar = α * P[i, j] * detJ
-            scalar == 0 && continue
-            my_A_mul_B!(scalar, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], x, y, offset)
+            my_A_mul_B!(α * P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], x, y, offset)
             # A_mul_B!(α * P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], view(x, :, el_idx), 1.0, view(y, :, el_idx))
         end
     end
