@@ -24,4 +24,6 @@ include("implicit_fine_grid.jl")
 include("build_local_operators.jl")
 include("multigrid.jl")
 
+include("examples/checkercube.jl")
+
 end
