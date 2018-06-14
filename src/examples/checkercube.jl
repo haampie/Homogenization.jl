@@ -81,6 +81,6 @@ function checkercube(n::Int)
     vtk_grid("checkercube", mesh) do vtk
         vtk_point_data(vtk, x, "x")
         vtk_point_data(vtk, x̄, "x_bar")
-        vtk_cell_data(vtk, reshape(reinterpret(Int, σ_per_el), 3, :), "σ")
+        vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), 3, :), "σ")
     end
 end
