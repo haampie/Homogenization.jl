@@ -37,12 +37,12 @@ function simple_mesh(::Type{<:Tri})
     Mesh(nodes, elements)
 end
 
-function test_multigrid(T::Type{<:ElementType} = Tet, total_levels = 2, iterations = 25; save_base_level = false, save_level = 1)
+function test_multigrid(T::Type{<:ElementType} = Tet; iterations = 25, save = false, save_level = 1, refine = 4, total_levels = 4)
 
-    coarse_mesh = refine_uniformly(simple_mesh(T), 4)
+    coarse_mesh = refine_uniformly(simple_mesh(T), times = refine)
 
     ωs = if T <: Tet
-        [1.8, 3.2, 5.5, 10.1, 18.6, 32.0, 57.0, 103.0]
+        [1.1, 1.8, 3.2, 5.5, 10.1, 18.6, 32.0, 57.0, 103.0]
     else
         [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
     end
@@ -92,15 +92,13 @@ function test_multigrid(T::Type{<:ElementType} = Tet, total_levels = 2, iteratio
     pvd = paraview_collection("multigrid_steps")
 
     # Do a v-cycle :tada:
-    println("""
-        Starting the v-cycles; note that the residual norm lags one step 
-        behind to avoid another expensive mv-product!
-    """)
+    println("Starting the v-cycles; note that the residual norm lags one step ",
+            "behind to avoid another expensive mv-product!")
     residuals = Float64[]
-    for i = 1 : iterations
+    @time for i = 1 : iterations
         vcycle!(implicit, base_level, level_operators, level_states, ωs, total_levels)
 
-        if save_base_level
+        if save
             let
                 println("Saving to step_$(lpad(i,3,0)).vtu")
                 vtk = vtk_grid("step_$(lpad(i,3,0))", tmpgrid)
@@ -117,7 +115,7 @@ function test_multigrid(T::Type{<:ElementType} = Tet, total_levels = 2, iteratio
         @show last(residuals)
     end
 
-    if save_base_level
+    if save
         vtk_save(pvd)
     end
 

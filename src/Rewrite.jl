@@ -12,6 +12,7 @@ include("sorting_tricks.jl")
 include("utils.jl")
 
 include("tri/refine.jl")
+include("tet/generate_grid.jl")
 include("tet/refine.jl")
 
 include("cell_values.jl")
