@@ -1,7 +1,7 @@
 """
 Create a cube of size n x n x n where each cell is split into 5 tetrahedra
 """
-function cube(n::Int, Tv::Type{<:AbstractFloat} = Float64, Ti::Type{<:Integer} = Int)
+function hypercube(::Type{<:Tet{Tv}}, n::Int, Ti::Type{<:Integer} = Int) where {Tv}
     Nn = (n + 1) * (n + 1) * (n + 1)
     Ne = 6 * n * n * n
     nn = reshape(1 : Nn, n + 1, n + 1, n + 1)

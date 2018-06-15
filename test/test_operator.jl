@@ -1,6 +1,6 @@
 using Base.Test
 using StaticArrays, WriteVTK
-using Rewrite: build_local_operators, Mesh, refine_uniformly, nelements, nnodes, 
+using Rewrite: build_local_diffusion_operators, Mesh, refine_uniformly, nelements, nnodes, 
                ImplicitFineGrid, construct_full_grid, refined_mesh, 
                broadcast_interfaces!, assemble_matrix
 
@@ -18,7 +18,7 @@ using Rewrite: build_local_operators, Mesh, refine_uniformly, nelements, nnodes,
     local_x = rand(nnodes(local_fine), nelements(implicit.base))
     broadcast_interfaces!(local_x, implicit, levels)
     local_y = zeros(nnodes(local_fine), nelements(implicit.base))
-    local_A = build_local_operators(implicit.reference)[levels]
+    local_A = build_local_diffusion_operators(implicit.reference)[levels]
 
     # Construct fine grid with repeated nodes
     fine_grid_repeated_nodes = construct_full_grid(implicit, levels)

@@ -20,15 +20,6 @@ function LevelState(total_base_elements::Int, total_fine_nodes::Int, Tv::Type{<:
     LevelState{Tv,typeof(x)}(x, b, r)
 end
 
-
-"""
-We store the local operator and the constraint.
-"""
-struct LevelOperator{dim,num,Tv,Ti}
-    A::∫ϕₓᵢϕₓⱼ{dim,num,Tv,Ti}
-    bc::ZeroDirichletConstraint{Ti}
-end
-
 """
 The coarsest grid is the base level. Here we should apply the inverse of `A`.
 """
@@ -46,23 +37,9 @@ function BaseLevel(Tv::Type{<:Number}, F, total_nodes::Integer, interior_nodes::
 end
 
 """
-Compute the residual r = b - A * x locally on each subdomain.
-"""
-function local_residual!(implicit::ImplicitFineGrid, ops::LevelOperator, curr::LevelState, k::Int)
-    # r ← b
-    copy!(curr.r, curr.b)
-
-    # r ← r - Ax = b - Ax
-    A_mul_B!(-1.0, implicit.base, ops.A, curr.x, curr.r)
-
-    # Apply the boundary condition.
-    apply_constraint!(curr.r, k, ops.bc, implicit)
-end
-
-"""
 Performs a single Richardson iteration
 """
-function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, curr::LevelState, k::Int)
+function smoothing_step!(implicit::ImplicitFineGrid, ops::LocalLinearOperator, ω, curr::LevelState, k::Int)
     # r ← b - A * x
     local_residual!(implicit, ops, curr, k)
 
@@ -73,7 +50,7 @@ function smoothing_step!(implicit::ImplicitFineGrid, ops::LevelOperator, ω, cur
     axpy!(ω, curr.r, curr.x)
 end
 
-function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LevelOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int)
+function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LocalLinearOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int, steps = 1)
     if k == 1
         broadcast_interfaces!(levels[1].b, implicit, 1)
 
@@ -100,7 +77,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         P = implicit.reference.interops[k - 1]
 
         # Smooth
-        for i = 1 : 2
+        for i = 1 : steps
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
         end
 
@@ -117,7 +94,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Leve
         interpolate_and_sum_to!(curr.x, P, next.x)
 
         # Smooth
-        for i = 1 : 2
+        for i = 1 : steps
             smoothing_step!(implicit, ops[k], ωs[k], curr, k)
         end
     end

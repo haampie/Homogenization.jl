@@ -12,8 +12,10 @@ include("sorting_tricks.jl")
 include("utils.jl")
 
 include("tri/refine.jl")
-include("tet/generate_grid.jl")
 include("tet/refine.jl")
+
+include("tet/generate_grid.jl")
+include("tri/generate_grid.jl")
 
 include("cell_values.jl")
 
@@ -23,6 +25,7 @@ include("assembly.jl")
 include("implicit_fine_grid.jl")
 include("build_local_operators.jl")
 include("multigrid.jl")
+include("apply_local_operators.jl")
 
 include("examples/checkercube.jl")
 

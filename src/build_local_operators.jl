@@ -1,26 +1,59 @@
-import Base.LinAlg: A_mul_B!
-using Base.Threads: @threads, nthreads
+"""
+Any operator that works locally on the implicit fine grid.
+"""
+abstract type LocalLinearOperator end
 
 struct ∫ϕₓᵢϕₓⱼ{dim,num,Tv,Ti}
     ops::SMatrix{dim,dim,SparseMatrixCSC{Tv,Ti},num}
 end
 
 """
-    build_local_operators(::MultilevelReference) -> Vector{∫ϕₓᵢϕₓⱼ}
+We store the local operator and the constraint.
+"""
+struct SimpleDiffusion{dim,num,Tv,Ti} <: LocalLinearOperator
+    A::∫ϕₓᵢϕₓⱼ{dim,num,Tv,Ti}
+    bc::ZeroDirichletConstraint{Ti}
+end
+
+"""
+Contains all the necessary data to perform a matrix-vector product with
+the operator L = I - λ∇⋅σ∇ where σ is constant in each coarse element. Also
+contains the Dirichlet boundary constraint.
+"""
+mutable struct L2PlusDivAGrad{T,U,V,W,X} <: LocalLinearOperator
+    diffusion_terms::T
+    mass::U
+    constraint::V
+    λ::W
+    σs::X
+end
+
+"""
+    build_local_diffusion_operators(::MultilevelReference) -> Vector{∫ϕₓᵢϕₓⱼ}
 
 Build the local ϕₓᵢ * ϕₓⱼ operators for each level.
 """
-function build_local_operators(ref::MultilevelReference{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
+function build_local_diffusion_operators(ref::MultilevelReference{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     ∫ϕₓᵢϕₓⱼs = Vector{∫ϕₓᵢϕₓⱼ{dim,dim*dim,Tv,Ti}}(length(ref.levels))
 
     for (i, level) in enumerate(ref.levels)
-        ∫ϕₓᵢϕₓⱼs[i] = _build_local_operators(level)
+        ∫ϕₓᵢϕₓⱼs[i] = _build_local_diffusion_operators(level)
     end
 
     return ∫ϕₓᵢϕₓⱼs
 end
 
-function _build_local_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
+function build_local_mass_matrices(ref::MultilevelReference{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
+    Ms = Vector{SparseMatrixCSC{Tv,Ti}}(length(ref.levels))
+
+    for (i, level) in enumerate(ref.levels)
+        Ms[i] = mass_matrix(level)
+    end
+
+    return Ms
+end
+
+function _build_local_diffusion_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     cell = cell_type(mesh)
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
@@ -76,53 +109,38 @@ function _build_local_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     ∫ϕₓᵢϕₓⱼ(SMatrix{dim,dim,SparseMatrixCSC{Tv,Ti},dim*dim}(Tuple(dropzeros!(sparse(Is[i], Js[i], Vs[i], Nn, Nn)) for i = 1 : dim*dim)))
 end
 
-"""
-    A_mul_B!(α, ::ImplicitFineGrid, ::∫ϕₓᵢϕₓⱼ, level, x, y)
+function mass_matrix(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
+    cell = cell_type(mesh)
+    quadrature = default_quad(cell)
+    weights = get_weights(quadrature)
+    element_values = ElementValues(cell, quadrature, update_det_J)
+    total = N * N * nelements(mesh)
+    is, js, vs = Vector{Ti}(total), Vector{Ti}(total), Vector{Tv}(total)
+    A_local = zeros(N, N)
 
-Compute `y ← α * A * x + y` in a distributed fashion. Note that it does not zero
-out `y`. (todo)
-"""
-function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫ϕₓᵢϕₓⱼ, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+    idx = 1
+    @inbounds for (e_idx, element) in enumerate(mesh.elements)
+        reinit!(element_values, mesh, element)
 
-    # Circular distribution
-    @threads for t = 1 : nthreads()
-        do_share_of_mv_product!(t, nthreads(), α, base, ∫ϕₓᵢϕₓⱼ_ops, x, y)
-    end
-end
+        # Reset local matrix
+        fill!(A_local, zero(Tv))
 
-"""
-The actual mv product that is performed per thread
-"""
-function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Mesh{dim,N,Tv,Ti}, ∫ϕₓᵢϕₓⱼ_ops::∫ϕₓᵢϕₓⱼ, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+        # For each quad point
+        @inbounds for qp = 1 : nquadpoints(quadrature), i = 1:N, j = 1:N
+            u = get_value(element_values, qp, i)
+            v = get_value(element_values, qp, j)
+            A_local[i,j] += weights[qp] * u * v
+        end
 
-    cell = cell_type(base)
-    element_values = ElementValues(cell, default_quad(cell), update_det_J | update_inv_J)
-
-    @inbounds for el_idx = thread_id : nthreads : nelements(base)
-        reinit!(element_values, base, base.elements[el_idx])
-
-        Jinv = get_inv_jac(element_values)
-        detJ = get_det_jac(element_values)
-
-        P = Jinv' * Jinv
-
-        # Try to avoid making views in a loop here
-        offset = (el_idx - 1) * size(x, 1)
-
-        # Apply the ops finally.
-        for i = 1 : dim, j = 1 : dim
-            my_A_mul_B!(α * P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], x, y, offset)
-            # A_mul_B!(α * P[i, j] * detJ, ∫ϕₓᵢϕₓⱼ_ops.ops[i, j], view(x, :, el_idx), 1.0, view(y, :, el_idx))
+        # Copy the local matrix over to the global one
+        @inbounds for i = 1:N, j = 1:N
+            is[idx] = element[i]
+            js[idx] = element[j]
+            vs[idx] = A_local[i,j] * get_det_jac(element_values)
+            idx += 1
         end
     end
-end
 
-function my_A_mul_B!(α, A::SparseMatrixCSC, x::AbstractMatrix, y::AbstractMatrix, offset::Int)
-    @inbounds for j = 1 : A.n
-        αxj = α * x[j + offset]
-        for i = A.colptr[j] : A.colptr[j + 1] - 1
-            y[A.rowval[i] + offset] += A.nzval[i] * αxj
-        end
-    end
-    y
+    # Build the sparse matrix
+    return dropzeros!(sparse(is, js, vs, nnodes(mesh), nnodes(mesh)))
 end

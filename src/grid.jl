@@ -58,6 +58,13 @@ Returns the number of elements in the mesh
 """
 nelements(mesh::Mesh) = length(mesh.elements)
 
+"""
+    dimension(mesh) -> Int
+
+Returns the dimension of the mesh
+"""
+dimension(mesh::Mesh{dim}) where {dim} = dim
+
 const TET_FACES = ((1,2,3),(1,2,4),(1,3,4),(2,3,4))
 const TET_EDGES = ((1,2),(1,3),(1,4),(2,3),(2,4),(3,4))
 const TRI_EDGES = ((1,2),(1,3),(2,3))

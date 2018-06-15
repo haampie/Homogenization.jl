@@ -1,5 +1,5 @@
 using StaticArrays, WriteVTK
-using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64, Tets64, affine_map, 
+using Rewrite: refined_element, build_local_diffusion_operators, Tets, Tris, Mesh, Tris64, Tets64, affine_map, 
                refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
                nodes_on_ref_edges, interfaces, face_to_elements, edge_to_elements,
                nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
@@ -7,7 +7,7 @@ using Rewrite: refined_element, build_local_operators, Tets, Tris, Mesh, Tris64,
                construct_full_grid, ZeroDirichletConstraint, list_boundary_nodes_edges_faces,
                refined_mesh, apply_constraint!, cell_type, default_quad, ElementValues,
                update_det_J, update_inv_J, reinit!, get_inv_jac, get_det_jac, distribute!, 
-               broadcast_interfaces!, LevelState, LevelOperator, base_mesh, vcycle!,
+               broadcast_interfaces!, LevelState, SimpleDiffusion, base_mesh, vcycle!,
                list_interior_nodes, assemble_matrix, BaseLevel, zero_out_all_but_one!,
                local_rhs!, assemble_vector, local_residual!, ElementType
 
@@ -74,8 +74,8 @@ function test_multigrid(T::Type{<:ElementType} = Tet; iterations = 25, save = fa
 
     # Build the operators
     println("Building the local operators")
-    level_operators = map(build_local_operators(implicit.reference)) do op
-        LevelOperator(op, constraint)
+    level_operators = map(build_local_diffusion_operators(implicit.reference)) do op
+        SimpleDiffusion(op, constraint)
     end
 
     # x is initially random with values matching on the interfaces and 0 on the boundary
