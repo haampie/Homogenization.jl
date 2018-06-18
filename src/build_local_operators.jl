@@ -3,16 +3,16 @@ Any operator that works locally on the implicit fine grid.
 """
 abstract type LocalLinearOperator end
 
-struct ∫ϕₓᵢϕₓⱼ{dim,num,Tv,Ti}
-    ops::SMatrix{dim,dim,SparseMatrixCSC{Tv,Ti},num}
+struct ∫ϕₓᵢϕₓⱼ{dim,Tv,Ti}
+    ops::Matrix{SparseMatrixCSC{Tv,Ti}}
 end
 
 """
 We store the local operator and the constraint.
 """
-struct SimpleDiffusion{dim,num,Tv,Ti} <: LocalLinearOperator
-    A::∫ϕₓᵢϕₓⱼ{dim,num,Tv,Ti}
-    bc::ZeroDirichletConstraint{Ti}
+struct SimpleDiffusion{dim,Tv,Ti,Tc<:ZeroDirichletConstraint} <: LocalLinearOperator
+    A::∫ϕₓᵢϕₓⱼ{dim,Tv,Ti}
+    bc::Tc
 end
 
 """
@@ -34,13 +34,9 @@ end
 Build the local ϕₓᵢ * ϕₓⱼ operators for each level.
 """
 function build_local_diffusion_operators(ref::MultilevelReference{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
-    ∫ϕₓᵢϕₓⱼs = Vector{∫ϕₓᵢϕₓⱼ{dim,dim*dim,Tv,Ti}}(length(ref.levels))
-
-    for (i, level) in enumerate(ref.levels)
-        ∫ϕₓᵢϕₓⱼs[i] = _build_local_diffusion_operators(level)
+    map(ref.levels) do level
+        _build_local_diffusion_operators(level)
     end
-
-    return ∫ϕₓᵢϕₓⱼs
 end
 
 function build_local_mass_matrices(ref::MultilevelReference{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
@@ -64,12 +60,12 @@ function _build_local_diffusion_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,
     Nq = nquadpoints(quadrature)
         
     # We'll pre-allocate the triples (is, js, vs)
-    Is = [Vector{Ti}(N * N * Nt) for i = 1 : dim * dim]
-    Js = [Vector{Ti}(N * N * Nt) for i = 1 : dim * dim]
-    Vs = [Vector{Tv}(N * N * Nt) for i = 1 : dim * dim]
+    Is = [Vector{Ti}(N * N * Nt) for i = 1 : dim, j = 1 : dim]
+    Js = [Vector{Ti}(N * N * Nt) for i = 1 : dim, j = 1 : dim]
+    Vs = [Vector{Tv}(N * N * Nt) for i = 1 : dim, j = 1 : dim]
     
     # The local system matrix
-    A_locals = [zeros(N, N) for i = 1 : dim * dim]
+    A_locals = [zeros(N, N) for i = 1 : dim, j = 1 : dim]
 
     idx = 1
 
@@ -78,8 +74,8 @@ function _build_local_diffusion_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,
         reinit!(element_values, mesh, element)
 
         # Reset local matrices
-        for i = 1 : dim * dim
-            fill!(A_locals[i], zero(Tv))
+        for i = 1 : dim, j = 1 : dim
+            fill!(A_locals[i, j], zero(Tv))
         end
 
         # Compute
@@ -88,7 +84,7 @@ function _build_local_diffusion_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,
             ∇ϕⱼ = get_grad(element_values, j)
 
             for k = 1 : dim, l = 1 : dim
-                A_locals[(k - 1) * dim + l][i,j] += weights[qp] * ∇ϕᵢ[k] * ∇ϕⱼ[l]
+                A_locals[l, k][i,j] += weights[qp] * ∇ϕᵢ[k] * ∇ϕⱼ[l]
             end
         end
 
@@ -96,17 +92,17 @@ function _build_local_diffusion_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,
         @inbounds for i = 1:N, j = 1:N
             det = get_det_jac(element_values)
 
-            for k = 1 : dim * dim
-                Is[k][idx] = element[i]
-                Js[k][idx] = element[j]
-                Vs[k][idx] = A_locals[k][i,j] * det
+            for k = 1 : dim, l = 1 : dim
+                Is[l,k][idx] = element[i]
+                Js[l,k][idx] = element[j]
+                Vs[l,k][idx] = A_locals[l,k][i,j] * det
             end
             idx += 1
         end
     end
 
     # Build the sparse matrix
-    ∫ϕₓᵢϕₓⱼ(SMatrix{dim,dim,SparseMatrixCSC{Tv,Ti},dim*dim}(Tuple(dropzeros!(sparse(Is[i], Js[i], Vs[i], Nn, Nn)) for i = 1 : dim*dim)))
+    ∫ϕₓᵢϕₓⱼ{dim,Tv,Ti}([dropzeros!(sparse(Is[l,k], Js[l,k], Vs[l,k], Nn, Nn)) for k = 1 : dim, l = 1 : dim])
 end
 
 function mass_matrix(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}

@@ -66,7 +66,7 @@ function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Me
 
         # Apply the ops finally.
         for i = 1 : dim, j = 1 : dim
-            my_A_mul_B!(α * P[i, j] * detJ, A.A[i, j], x, y, offset)
+            my_A_mul_B!(α * P[i, j] * detJ, A.A.ops[i, j], x, y, offset)
         end
     end
 end
@@ -85,9 +85,9 @@ out `y`. (todo)
 function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, A::L2PlusDivAGrad, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
 
     # Circular distribution
-    # @threads for t = 1 : nthreads()
-        do_share_of_mv_product!(1, 1, α, base, A, x, y)
-    # end
+    @threads for t = 1 : nthreads()
+        do_share_of_mv_product!(t, nthreads(), α, base, A, x, y)
+    end
 end
 
 function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Mesh{dim,N,Tv,Ti}, A::L2PlusDivAGrad, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
@@ -107,16 +107,13 @@ function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Me
         # Try to avoid making views in a loop here
         offset = (el_idx - 1) * size(x, 1)
 
-        # We're multiplying with the λ∇⋅σ∇ term first
-        scalar = α * A.λ * detJ
-
         # Diffusion part
         for i = 1 : dim, j = 1 : dim
-            my_A_mul_B!(scalar * P[i, j], A.diffusion_terms.ops[i, j], x, y, offset)
+            my_A_mul_B!(α * detJ * P[i, j], A.diffusion_terms.ops[i, j], x, y, offset)
         end
 
         # Mass matrix term
-        my_A_mul_B!(α * detJ, A.mass, x, y, offset)
+        my_A_mul_B!(α * A.λ * detJ, A.mass, x, y, offset)
     end
 end
 

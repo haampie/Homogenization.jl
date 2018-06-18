@@ -35,7 +35,7 @@ struct SparseCellToElementMap{N,Ti}
 end
 
 # Construct an empty sparse map
-empty_map(N::Int, Ti::Type{<:Integer} = Int) = SparseCellToElementMap{N,Int}(
+empty_map(::Type{Val{N}}, Ti::Type{<:Integer} = Int) where {N} = SparseCellToElementMap{N,Int}(
     Ti[],
     Vector{NTuple{N,Ti}}(),
     Vector{ElementId{Ti}}()
@@ -64,7 +64,7 @@ end
 
 function interfaces(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     # First order the element nodes.
-    @assert all(issorted, mesh.elements)
+    # @assert all(issorted, mesh.elements)
 
     all_nodes, nodes = node_to_elements(mesh)
     edges = edge_to_elements(mesh)
@@ -114,7 +114,7 @@ function face_to_elements(mesh::Mesh{3,N,Tv,Ti}) where {N,Tv,Ti}
 end
 
 # Fallback for 2D meshes without faces :)
-face_to_elements(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti} = empty_map(3, Ti)
+face_to_elements(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti} = empty_map(Val{3}, Ti)
 
 """
     list_faces_with_element(mesh) -> Vector{CellToEl}
@@ -280,7 +280,7 @@ function list_boundary_nodes_edges_faces(m::Tris{Tv,Ti}) where {Tv,Ti}
     radix_sort!(nodes, nnodes(m), 1)
     intersect!(nodes, boundary_nodes)
 
-    return compress(nodes), compress(edges), empty_map(3, Ti)
+    return compress(nodes), compress(edges), empty_map(Val{3}, Ti)
 end
 
 """
