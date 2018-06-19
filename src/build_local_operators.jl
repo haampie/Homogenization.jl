@@ -40,13 +40,9 @@ function build_local_diffusion_operators(ref::MultilevelReference{dim,N,Tv,Ti}) 
 end
 
 function build_local_mass_matrices(ref::MultilevelReference{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
-    Ms = Vector{SparseMatrixCSC{Tv,Ti}}(length(ref.levels))
-
-    for (i, level) in enumerate(ref.levels)
-        Ms[i] = mass_matrix(level)
+    map(ref.levels) do level
+        mass_matrix(level)
     end
-
-    return Ms
 end
 
 function _build_local_diffusion_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
@@ -122,14 +118,14 @@ function mass_matrix(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
         fill!(A_local, zero(Tv))
 
         # For each quad point
-        @inbounds for qp = 1 : nquadpoints(quadrature), i = 1:N, j = 1:N
+        for qp = 1 : nquadpoints(quadrature), i = 1:N, j = 1:N
             u = get_value(element_values, qp, i)
             v = get_value(element_values, qp, j)
             A_local[i,j] += weights[qp] * u * v
         end
 
         # Copy the local matrix over to the global one
-        @inbounds for i = 1:N, j = 1:N
+        for i = 1:N, j = 1:N
             is[idx] = element[i]
             js[idx] = element[j]
             vs[idx] = A_local[i,j] * get_det_jac(element_values)

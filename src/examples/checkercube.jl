@@ -9,7 +9,7 @@ end
 end
 
 """
-Build the operator for the bilinear form B[u,v] = ∫uv + λ*a∇u⋅∇v.
+Build the operator for the bilinear form B[u,v] = ∫λuv + a∇u⋅∇v.
 """
 function assemble_checkercube(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{SVector{dim,Tv}}, λ::Tv = 1.0) where {dim,N,Tv,Ti}
     cell = cell_type(mesh)
@@ -159,7 +159,7 @@ function conductivity_per_element(mesh::Mesh{dim}, σ::Conductivity{Tv,dim}) whe
     σ_el
 end
 
-function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements = 2)
+function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements = 2, λ = 1.0)
     mesh = refine_uniformly(hypercube(elementtype, n), times = refinements)
     sort_element_nodes!(mesh.elements)
     @show nnodes(mesh)
@@ -171,8 +171,8 @@ function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = 
     σ_per_el = conductivity_per_element(mesh, σ)
     interior = list_interior_nodes(mesh)
 
+    return A_full = assemble_checkercube(mesh, σ_per_el, λ)
     Ā_full = assemble_matrix(mesh, (∇u, ∇v) -> 3.0 * dot(∇u, ∇v))
-    A_full = assemble_checkercube(mesh, σ_per_el, 1.0)
     b_full = assemble_vector(mesh, identity)
     A = A_full[interior, interior]
     b = b_full[interior]
@@ -194,6 +194,10 @@ end
 function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, save::Int = 1, cycles::Int = 20, steps::Int = 2)
     ### Coarse grid
     base = hypercube(elementtype, n)
+
+    # The correction to the homogenized coefficient (and the correction per step)
+    mourrat_σ = 0.0
+    Δmourrat_σ = 0.0
 
     # Unit direction.
     ξ = @SVector rand(dimension(base))
@@ -249,62 +253,64 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
 
     ### Select a handful of 
     center = @SVector fill(0.5 * n + 1, dimension(base))
-    radius = float(div(n, 2) - 4)
+    radius = float(div(n, 2) - 10)
     subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
 
     ### Save the coarse grid for reference
-    println("Saving")
-    pvd_coarse = paraview_collection("checker_coarse")
-    coarsegridfull = construct_full_grid(implicit, 1)
-    vtk_coarse = vtk_grid("checker_coarse", coarsegridfull)
-    vtk_cell_data(vtk_coarse, reshape(reinterpret(Float64, σ_per_el), dimension(coarsegridfull), :), "σ")
-    selected_guys = zeros(nelements(coarsegridfull))
-    selected_guys[subset] = 1.0
-    vtk_cell_data(vtk_coarse, selected_guys, "Domain of integration")
-    vtk_save(vtk_coarse)
-    collection_add_timestep(pvd_coarse, vtk_coarse, 1.0)
+    # println("Saving")
+    # pvd_coarse = paraview_collection("checker_coarse")
+    # coarsegridfull = construct_full_grid(implicit, 1)
+    # vtk_coarse = vtk_grid("checker_coarse", coarsegridfull)
+    # vtk_cell_data(vtk_coarse, reshape(reinterpret(Float64, σ_per_el), dimension(coarsegridfull), :), "σ")
+    # selected_guys = zeros(nelements(coarsegridfull))
+    # selected_guys[subset] = 1.0
+    # vtk_cell_data(vtk_coarse, selected_guys, "Domain of integration")
+    # vtk_save(vtk_coarse)
+    # collection_add_timestep(pvd_coarse, vtk_coarse, 1.0)
 
     ## Save a slightly less coarse version of the vₖ's
-    tmpgrid = construct_full_grid(implicit, save)
-    pvd = paraview_collection("checker")
-    vtk_ = vtk_grid("checker_000", tmpgrid)
-    n = nnodes(refined_mesh(implicit, save))
-    bcopy = copy(finest_level.b)
-    broadcast_interfaces!(bcopy, implicit, refinements)
-    vtk_point_data(vtk_, bcopy[1 : n, :], "b")
-    vtk_save(vtk_)
-    collection_add_timestep(pvd, vtk_, 0.0)
+    # tmpgrid = construct_full_grid(implicit, save)
+    # pvd = paraview_collection("checker")
+    # vtk_ = vtk_grid("checker_000", tmpgrid)
+    # n = nnodes(refined_mesh(implicit, save))
+    # bcopy = copy(finest_level.b)
+    # broadcast_interfaces!(bcopy, implicit, refinements)
+    # vtk_point_data(vtk_, bcopy[1 : n, :], "b")
+    # vtk_save(vtk_)
+    # collection_add_timestep(pvd, vtk_, 0.0)
 
     println("Cycling")
 
     total_mg_steps = 0
+    local_sum = zeros(nelements(implicit.base))
+    ops = level_operators[refinements]
 
     for i = 1 : cycles
         vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, steps)
 
-        total_mg_steps += 1
-        println("Saving to checker_$(lpad(total_mg_steps,3,0)).vtu")
-        vtk = vtk_grid("checker_$(lpad(total_mg_steps,3,0))", tmpgrid)
-        n = nnodes(refined_mesh(implicit, save))
-        vtk_point_data(vtk, level_states[end].r[1 : n, :], "r")
-        vtk_point_data(vtk, level_states[end].x[1 : n, :], "x")
-        vtk_point_data(vtk, level_states[end].b[1 : n, :], "b")
-        vtk_save(vtk)
-        collection_add_timestep(pvd, vtk, float(total_mg_steps))
+        # total_mg_steps += 1
+        # println("Saving to checker_$(lpad(total_mg_steps,3,0)).vtu")
+        # vtk = vtk_grid("checker_$(lpad(total_mg_steps,3,0))", tmpgrid)
+        # n = nnodes(refined_mesh(implicit, save))
+        # vtk_point_data(vtk, level_states[end].r[1 : n, :], "r")
+        # vtk_point_data(vtk, level_states[end].x[1 : n, :], "x")
+        # vtk_point_data(vtk, level_states[end].b[1 : n, :], "b")
+        # vtk_save(vtk)
+        # collection_add_timestep(pvd, vtk, float(total_mg_steps))
 
+        # Compute the correction to the homogenized coefficient
+
+        fill!(local_sum, 0)
+        sum_first_term!(local_sum, finest_level.x, ∂ϕ∂xᵢs, implicit, subset, ops, σ_per_el, ξ)
+        Δmourrat_σ = sum(local_sum) / area(ops, implicit, subset)
+        @show Δmourrat_σ
+
+        # Compute the residual (that lags behind one step!!)
         zero_out_all_but_one!(finest_level.r, implicit, refinements)
         @show vecnorm(finest_level.r)
     end
 
-    ops = level_operators[refinements]
-    local_sum = zeros(nelements(implicit.base))
-
-    # Do the first sum :)
-    sum_first_term!(local_sum, finest_level.x, ∂ϕ∂xᵢs, implicit, subset, ops, σ_per_el, ξ)
-
-    mourrat_σ = sum(local_sum) / area(ops, implicit, subset)
-
-    @show mourrat_σ
+    mourrat_σ += Δmourrat_σ
 
     # vtk_save(pvd)
 
@@ -332,16 +338,21 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
         for i = 1 : cycles
             vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, steps)
             
-            total_mg_steps += 1
-            println("Saving to checker_$(lpad(total_mg_steps,3,0)).vtu")
-            vtk = vtk_grid("checker_$(lpad(total_mg_steps,3,0))", tmpgrid)
-            n = nnodes(refined_mesh(implicit, save))
-            vtk_point_data(vtk, level_states[end].r[1 : n, :], "r")
-            vtk_point_data(vtk, level_states[end].x[1 : n, :], "x")
-            vtk_point_data(vtk, level_states[end].b[1 : n, :], "b")
-            vtk_save(vtk)
-            collection_add_timestep(pvd, vtk, float(total_mg_steps))
-    
+            # total_mg_steps += 1
+            # println("Saving to checker_$(lpad(total_mg_steps,3,0)).vtu")
+            # vtk = vtk_grid("checker_$(lpad(total_mg_steps,3,0))", tmpgrid)
+            # n = nnodes(refined_mesh(implicit, save))
+            # vtk_point_data(vtk, level_states[end].r[1 : n, :], "r")
+            # vtk_point_data(vtk, level_states[end].x[1 : n, :], "x")
+            # vtk_point_data(vtk, level_states[end].b[1 : n, :], "b")
+            # vtk_save(vtk)
+            # collection_add_timestep(pvd, vtk, float(total_mg_steps))
+
+            fill!(local_sum, 0)
+            sum_terms!(local_sum, finest_level.x, v_prev, implicit, subset, ops)
+            Δmourrat_σ = 2^mourrat_steps * sum(local_sum) / area(ops, implicit, subset)
+            @show Δmourrat_σ    
+
             zero_out_all_but_one!(finest_level.r, implicit, refinements)
             @show vecnorm(finest_level.r)
         end
@@ -350,23 +361,21 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
         radius = ceil(radius / sqrt(2))
         subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
 
-        fill!(local_sum, 0)
-        sum_terms!(local_sum, finest_level.x, v_prev, implicit, subset, ops)
-        mourrat_σ += 2^mourrat_steps * sum(local_sum) / area(ops, implicit, subset)
+        mourrat_σ += Δmourrat_σ
         @show mourrat_σ
 
-        println("Saving another coarse grid")
-        vtk_coarse = vtk_grid("checker_coarse_$(lpad(mourrat_steps,3,0))", coarsegridfull)
-        vtk_cell_data(vtk_coarse, reshape(reinterpret(Float64, σ_per_el), dimension(coarsegridfull), :), "σ")
-        selected_guys = zeros(nelements(coarsegridfull))
-        selected_guys[subset] = 1.0
-        vtk_cell_data(vtk_coarse, selected_guys, "Domain of integration")
-        vtk_save(vtk_coarse)
-        collection_add_timestep(pvd_coarse, vtk_coarse, float(mourrat_steps))
+        # println("Saving another coarse grid")
+        # vtk_coarse = vtk_grid("checker_coarse_$(lpad(mourrat_steps,3,0))", coarsegridfull)
+        # vtk_cell_data(vtk_coarse, reshape(reinterpret(Float64, σ_per_el), dimension(coarsegridfull), :), "σ")
+        # selected_guys = zeros(nelements(coarsegridfull))
+        # selected_guys[subset] = 1.0
+        # vtk_cell_data(vtk_coarse, selected_guys, "Domain of integration")
+        # vtk_save(vtk_coarse)
+        # collection_add_timestep(pvd_coarse, vtk_coarse, float(mourrat_steps))
     end
 
-    vtk_save(pvd)
-    vtk_save(pvd_coarse)
+    # vtk_save(pvd)
+    # vtk_save(pvd_coarse)
 
     mourrat_σ
 end
@@ -393,6 +402,8 @@ end
 The initial right-hand side is formed via functional F(v) = -∫aξ⋅∇v. As a is
 constant, we just compute ∫∂̂ϕᵢ∂xⱼ on the reference cell, and then use the
 pullback to assemble the vector using something like (|J|aξ⋅J⁻¹)∇̂ϕ.
+
+It comes down to summing (linear combination of partial derivatives + M v₀) * v₀
 """
 function sum_first_term!(local_sum::Vector{Tv}, v₀::AbstractMatrix{Tv}, ∂ϕ∂xᵢs::Vector{SVector{dim,Tv}}, implicit::ImplicitFineGrid{dim}, subset::Vector{Ti}, ops::L2PlusDivAGrad, σs::Vector{SVector{dim,Tv}}, ξ::SVector{dim,Tv}) where {dim,Tv,Ti}
     base = base_mesh(implicit)
@@ -468,7 +479,8 @@ function sum_terms!(local_sum::Vector{Tv}, vₖ, vₖ₋₁, implicit::ImplicitF
 end
 
 """
-Compute 1ᵗM1 under selected base cells.
+Compute 1ᵗM1 under selected base cells. Maybe it's better to avoid this
+computation and incorporate it in the `sum_terms` and `sum_first_term` functions
 """
 function area(ops::L2PlusDivAGrad, implicit::ImplicitFineGrid, subset::Vector{Ti}) where {Ti}
     base = base_mesh(implicit)
@@ -488,6 +500,10 @@ function area(ops::L2PlusDivAGrad, implicit::ImplicitFineGrid, subset::Vector{Ti
     area
 end
 
+"""
+The next *local* right-hand side `b` will simply be `M * x`, mass matrix times
+previous solution.
+"""
 function next_rhs!(b::AbstractMatrix{Tv}, x::AbstractMatrix{Tv}, implicit::ImplicitFineGrid, ops::L2PlusDivAGrad) where {Tv}
     base = base_mesh(implicit)
     fine = refined_mesh(implicit, nlevels(implicit))
