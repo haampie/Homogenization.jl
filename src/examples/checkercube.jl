@@ -316,6 +316,9 @@ function compare_refinements_on_same_material(refinements = 2 : 7)
         push!(results, checkercube(128, Tri{Float64}, ref, 1e-4, 50, 5, 2))
     end
     refinements, results
+    #plot(vcat([abs.(results[end][1][i] .- (2results[end][1][i][end] - results[end][1][i][end-1])) for i = 1 : 6]...), yscale = :log10, mark = :o)
+    #conv = [sum([results[j][1][i][end] for i = 1 : length(results[j][1])]) for j = 1 : 7]
+    #plot([abs.(conv .- (4 * conv[7] - conv[6]) / 3)], yscale = :log10, mark = :x)
 end
 
 """
