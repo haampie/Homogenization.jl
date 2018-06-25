@@ -191,22 +191,13 @@ function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = 
     return A_full
 end
 
-function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, save::Int = 1, cycles::Int = 20, steps::Int = 2)
-    ### Coarse grid
+function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, tol = 1e-4, max_cycles::Int = 20, k_max = 5, smoothing_steps::Int = 2)
     base = hypercube(elementtype, n)
+    ξ = @SVector [1/√2, 1/√2]
 
-    # The correction to the homogenized coefficient (and the correction per step)
-    mourrat_σ = 0.0
-    Δmourrat_σ = 0.0
-
-    # Unit direction.
-    ξ = @SVector rand(dimension(base))
-    ξ /= norm(ξ)
-
-    # Conductivity per [0, 1]^d bit
+    # Generate conductivity
+    srand(1)
     σ = generate_conductivity(base, n)
-
-    # Simple lookup to get the conductivity per mesh element
     σ_per_el = conductivity_per_element(base, σ)
 
     ### Coarse grid.
@@ -251,76 +242,53 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
 
     ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 1.15
 
-    ### Select a handful of 
     center = @SVector fill(0.5 * n + 1, dimension(base))
     radius = float(div(n, 2) - 10)
     subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
-
-    ### Save the coarse grid for reference
-    # println("Saving")
-    # pvd_coarse = paraview_collection("checker_coarse")
-    # coarsegridfull = construct_full_grid(implicit, 1)
-    # vtk_coarse = vtk_grid("checker_coarse", coarsegridfull)
-    # vtk_cell_data(vtk_coarse, reshape(reinterpret(Float64, σ_per_el), dimension(coarsegridfull), :), "σ")
-    # selected_guys = zeros(nelements(coarsegridfull))
-    # selected_guys[subset] = 1.0
-    # vtk_cell_data(vtk_coarse, selected_guys, "Domain of integration")
-    # vtk_save(vtk_coarse)
-    # collection_add_timestep(pvd_coarse, vtk_coarse, 1.0)
-
-    ## Save a slightly less coarse version of the vₖ's
-    # tmpgrid = construct_full_grid(implicit, save)
-    # pvd = paraview_collection("checker")
-    # vtk_ = vtk_grid("checker_000", tmpgrid)
-    # n = nnodes(refined_mesh(implicit, save))
-    # bcopy = copy(finest_level.b)
-    # broadcast_interfaces!(bcopy, implicit, refinements)
-    # vtk_point_data(vtk_, bcopy[1 : n, :], "b")
-    # vtk_save(vtk_)
-    # collection_add_timestep(pvd, vtk_, 0.0)
-
-    println("Cycling")
-
-    total_mg_steps = 0
     local_sum = zeros(nelements(implicit.base))
     ops = level_operators[refinements]
-
-    for i = 1 : cycles
-        vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, steps)
-
-        # total_mg_steps += 1
-        # println("Saving to checker_$(lpad(total_mg_steps,3,0)).vtu")
-        # vtk = vtk_grid("checker_$(lpad(total_mg_steps,3,0))", tmpgrid)
-        # n = nnodes(refined_mesh(implicit, save))
-        # vtk_point_data(vtk, level_states[end].r[1 : n, :], "r")
-        # vtk_point_data(vtk, level_states[end].x[1 : n, :], "x")
-        # vtk_point_data(vtk, level_states[end].b[1 : n, :], "b")
-        # vtk_save(vtk)
-        # collection_add_timestep(pvd, vtk, float(total_mg_steps))
-
-        # Compute the correction to the homogenized coefficient
-
-        fill!(local_sum, 0)
-        sum_first_term!(local_sum, finest_level.x, ∂ϕ∂xᵢs, implicit, subset, ops, σ_per_el, ξ)
-        Δmourrat_σ = sum(local_sum) / area(ops, implicit, subset)
-        @show Δmourrat_σ
-
-        # Compute the residual (that lags behind one step!!)
-        zero_out_all_but_one!(finest_level.r, implicit, refinements)
-        @show vecnorm(finest_level.r)
-    end
-
-    mourrat_σ += Δmourrat_σ
-
-    # vtk_save(pvd)
-
+    σs = Vector{Float64}[] # Collect the changes in σ per mg iteration
+    rs = Vector{Float64}[] # Collect the residual norms per mg iteration
     λ = 1.0
 
-    for mourrat_steps = 2 : 4
-        # Our current x becomes our previous x.
-        # We keep finest_level.x as initial guess.
-        copy!(v_prev, finest_level.x)
+    for k = 0 : k_max
+        println("Step ", k)
 
+        # Keep track of increments in σ and residual norms of multigrid
+        σs_k = Float64[]
+        rs_k = Float64[]
+
+        # Construct a coarse grid operator
+        F = cholfact(assemble_checkercube(base, σ_per_el, λ)[interior,interior])
+        base_level = BaseLevel(Float64, F, nnodes(base), interior)
+
+        # Solve the next problem
+        for i = 1 : max_cycles
+            println("Cycle ", i)
+            vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, smoothing_steps)
+
+            # Initial rhs is special
+            fill!(local_sum, 0)
+            if k == 0
+                sum_first_term!(local_sum, finest_level.x, ∂ϕ∂xᵢs, implicit, subset, ops, σ_per_el, ξ)
+            else
+                sum_terms!(local_sum, finest_level.x, v_prev, implicit, subset, ops)
+            end
+
+            # Compute increment in σ and residual norm
+            zero_out_all_but_one!(finest_level.r, implicit, refinements)
+            push!(σs_k, 2^k * sum(local_sum) / area(ops, implicit, subset))
+            push!(rs_k, vecnorm(finest_level.r))
+
+            # Check convergence
+            if i > 1
+                # Error w.r.t. 1st order Richardson extrapolation
+                abs(σs_k[end] - σs_k[end-1]) < tol && break
+            end
+        end
+
+        # Our current x becomes our previous x; keep x as initial guess for next round
+        copy!(v_prev, finest_level.x)
         λ /= 2
 
         # Update the fine grid operator (just λ)
@@ -328,56 +296,26 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
             operator.λ = λ
         end
 
-        # Construct a new coarse grid operator
-        F = cholfact(assemble_checkercube(base, σ_per_el, λ)[interior,interior])
-        base_level = BaseLevel(Float64, F, nnodes(base), interior)
-
         # Update the right-hand side.
         next_rhs!(finest_level.b, finest_level.x, implicit, ops)
-
-        for i = 1 : cycles
-            vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, steps)
-            
-            # total_mg_steps += 1
-            # println("Saving to checker_$(lpad(total_mg_steps,3,0)).vtu")
-            # vtk = vtk_grid("checker_$(lpad(total_mg_steps,3,0))", tmpgrid)
-            # n = nnodes(refined_mesh(implicit, save))
-            # vtk_point_data(vtk, level_states[end].r[1 : n, :], "r")
-            # vtk_point_data(vtk, level_states[end].x[1 : n, :], "x")
-            # vtk_point_data(vtk, level_states[end].b[1 : n, :], "b")
-            # vtk_save(vtk)
-            # collection_add_timestep(pvd, vtk, float(total_mg_steps))
-
-            fill!(local_sum, 0)
-            sum_terms!(local_sum, finest_level.x, v_prev, implicit, subset, ops)
-            Δmourrat_σ = 2^mourrat_steps * sum(local_sum) / area(ops, implicit, subset)
-            @show Δmourrat_σ    
-
-            zero_out_all_but_one!(finest_level.r, implicit, refinements)
-            @show vecnorm(finest_level.r)
-        end
 
         # Select a new integration domain
         radius = ceil(radius / sqrt(2))
         subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
 
-        mourrat_σ += Δmourrat_σ
-        @show mourrat_σ
-
-        # println("Saving another coarse grid")
-        # vtk_coarse = vtk_grid("checker_coarse_$(lpad(mourrat_steps,3,0))", coarsegridfull)
-        # vtk_cell_data(vtk_coarse, reshape(reinterpret(Float64, σ_per_el), dimension(coarsegridfull), :), "σ")
-        # selected_guys = zeros(nelements(coarsegridfull))
-        # selected_guys[subset] = 1.0
-        # vtk_cell_data(vtk_coarse, selected_guys, "Domain of integration")
-        # vtk_save(vtk_coarse)
-        # collection_add_timestep(pvd_coarse, vtk_coarse, float(mourrat_steps))
+        push!(σs, σs_k)
+        push!(rs, rs_k)
     end
 
-    # vtk_save(pvd)
-    # vtk_save(pvd_coarse)
+    σs, rs
+end
 
-    mourrat_σ
+function compare_refinements_on_same_material(refinements = 2 : 7)
+    results = []
+    for ref = refinements
+        push!(results, checkercube(128, Tri{Float64}, ref, 1e-4, 50, 5, 2))
+    end
+    refinements, results
 end
 
 """
