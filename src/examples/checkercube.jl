@@ -245,6 +245,7 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     center = @SVector fill(0.5 * n + 1, dimension(base))
     radius = float(div(n, 2) - 10)
     subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
+
     local_sum = zeros(nelements(implicit.base))
     ops = level_operators[refinements]
     σs = Vector{Float64}[] # Collect the changes in σ per mg iteration
@@ -313,7 +314,7 @@ end
 function compare_refinements_on_same_material(refinements = 2 : 7)
     results = []
     for ref = refinements
-        push!(results, checkercube(128, Tri{Float64}, ref, 1e-4, 50, 5, 2))
+        push!(results, checkercube(148, Tri{Float64}, ref, 1e-4, 50, 5, 2))
     end
     refinements, results
     #plot(vcat([abs.(results[end][1][i] .- (2results[end][1][i][end] - results[end][1][i][end-1])) for i = 1 : 6]...), yscale = :log10, mark = :o)
