@@ -171,16 +171,16 @@ function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = 
     σ_per_el = conductivity_per_element(mesh, σ)
     interior = list_interior_nodes(mesh)
 
-    return A_full = assemble_checkercube(mesh, σ_per_el, λ)
-    Ā_full = assemble_matrix(mesh, (∇u, ∇v) -> 3.0 * dot(∇u, ∇v))
+    A_full = assemble_checkercube(mesh, σ_per_el, λ)
+    Ā_full = assemble_matrix(mesh, (∇u, ∇v) -> 3.79 * dot(∇u, ∇v))
     b_full = assemble_vector(mesh, identity)
     A = A_full[interior, interior]
+    Ā = Ā_full[interior, interior]
     b = b_full[interior]
-
     x = zeros(nnodes(mesh))
     x̄ = zeros(nnodes(mesh))
-    x[interior] .= A[interior, interior] \ b[interior]
-    x̄[interior] .= Ā[interior, interior] \ b[interior]
+    x[interior] .= A \ b
+    x̄[interior] .= Ā \ b
 
     vtk_grid("checkercube_full", mesh) do vtk
         vtk_point_data(vtk, x, "x")
@@ -193,7 +193,8 @@ end
 
 function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, tol = 1e-4, max_cycles::Int = 20, k_max = 5, smoothing_steps::Int = 2)
     base = hypercube(elementtype, n)
-    ξ = @SVector [1/√2, 1/√2]
+    ξ = @SVector ones(dimension(base))
+    ξ /= norm(ξ)
 
     # Generate conductivity
     srand(1)
@@ -240,7 +241,7 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, refinements))
     rhs_aξ∇v!(finest_level.b, ∂ϕ∂xᵢs, implicit, σ_per_el, ξ)
 
-    ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 1.15
+    ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 1
 
     center = @SVector fill(0.5 * n + 1, dimension(base))
     radius = float(div(n, 2) - 10)
@@ -280,6 +281,8 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
             zero_out_all_but_one!(finest_level.r, implicit, refinements)
             push!(σs_k, 2^k * sum(local_sum) / area(ops, implicit, subset))
             push!(rs_k, vecnorm(finest_level.r))
+
+            @show last(rs_k) last(σs_k)
 
             # Check convergence
             if i > 1
