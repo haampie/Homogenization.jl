@@ -91,7 +91,7 @@ of indices.
 end
 
 @propagate_inbounds function get_nodes(m::Mesh{dim,N,Tv,Ti}, element::NTuple{M,Ti}) where {dim,N,Tv,Ti,M}
-    NTuple{M,SVector{dim,Tv}}(m.nodes[i] for i in element)
+    ntuple(i -> m.nodes[element[i]], Val{M})
 end
 
 """

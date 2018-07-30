@@ -3,41 +3,39 @@ using Base: @propagate_inbounds
 
 abstract type QuadRule{dim,nquad,Tv} end
 
-abstract type TetQuad4{Tv} <: QuadRule{3,4,Tv} end
-abstract type TriQuad3{Tv} <: QuadRule{2,3,Tv} end
+struct TetQuad4{Tv} <: QuadRule{3,4,Tv} end
+struct TriQuad3{Tv} <: QuadRule{2,3,Tv} end
+struct TriQuad1{Tv} <: QuadRule{2,1,Tv} end
 
-function get_points(::Type{TetQuad4{Tv}}) where {Tv}
+function get_points(::TetQuad4{Tv}) where {Tv}
     a, b = (Tv(5) + Tv(3) * √Tv(5)) / Tv(20), (Tv(5) - √Tv(5)) / Tv(20)
 
-    return SVector((
+    return @SVector [
         SVector{3,Tv}(a,b,b),
         SVector{3,Tv}(b,a,b),
         SVector{3,Tv}(b,b,a),
         SVector{3,Tv}(b,b,b)
-    ))
+    ]
 end
 
-function get_weights(::Type{TetQuad4{Tv}}) where {Tv}
-    w = Tv(1) / Tv(24)
-    return SVector((w, w, w, w))
-end
+get_weights(::TetQuad4{Tv}) where {Tv} = @SVector [Tv(1//24), Tv(1//24), Tv(1//24), Tv(1//24)]
 
-function get_points(::Type{TriQuad3{Tv}}) where {Tv}
-    return SVector((
-        SVector{2,Tv}(0.0, 0.5),
-        SVector{2,Tv}(0.5, 0.0),
-        SVector{2,Tv}(0.5, 0.5),
-    ))
-end
+get_weights(::TriQuad3{Tv}) where {Tv} = @SVector [Tv(1//6), Tv(1//6), Tv(1//6)]
+get_points(::TriQuad3{Tv}) where {Tv} = @SVector [
+    SVector{2,Tv}(Tv(0//2), Tv(1//2)),
+    SVector{2,Tv}(Tv(1//2), Tv(0//2)),
+    SVector{2,Tv}(Tv(1//2), Tv(1//2)),
+]
 
-function get_weights(::Type{TriQuad3{Tv}}) where {Tv}
-    w = Tv(1/6)
-    return SVector((w, w, w, w))
-end
+get_weights(::TriQuad1{Tv}) where {Tv} = @SVector [Tv(1//2)]
+get_points(::TriQuad1{Tv}) where {Tv} = @SVector [
+    SVector{2,Tv}(Tv(1//2), Tv(1//2))
+]
 
-@inline default_quad(::Type{Tri{Tv}}) where {Tv} = TriQuad3{Tv}
-@inline default_quad(::Type{Tet{Tv}}) where {Tv} = TetQuad4{Tv}
-@inline nquadpoints(::Type{<:QuadRule{dim,nquad}}) where {dim,nquad} = nquad
+
+@inline default_quad(::Type{Tri{Tv}}) where {Tv} = TriQuad3{Tv}()
+@inline default_quad(::Type{Tet{Tv}}) where {Tv} = TetQuad4{Tv}()
+@inline nquadpoints(::QuadRule{dim,nquad}) where {dim,nquad} = nquad
 
 get_basis_funcs(::Type{Tri{Tv}}) where {Tv} = (
     x -> Tv(1) - x[1] - x[2],
