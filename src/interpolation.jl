@@ -4,7 +4,7 @@ using Base.Threads: @threads, nthreads
 Return the interpolation operator assuming all linear basis elements and all
 edges being split in two.
 """
-function interpolation_operator(mesh::Mesh{dim,N,Tv,Ti}, graph::SparseGraph{Ti}) where {dim,N,Ti,Tv}
+function interpolation_operator(mesh::Mesh{dim,N,Tv,Ti}, graph::SparseGraph{Ti} = edge_graph(mesh)) where {dim,N,Ti,Tv}
     # Interpolation operator
     Nn = length(mesh.nodes)
     Ne = length(graph.adj)

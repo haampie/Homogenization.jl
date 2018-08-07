@@ -74,7 +74,7 @@ const update_det_J     = (1 << 3) | update_J
 const update_x         = 1 << 4 | update_J
 const everything = update_gradients | update_J | update_det_J | update_inv_J | update_x
 
-function ElementValues(cell::Type{<:ElementType{dim,ndof,Tv}}, quad::Type{<:QuadRule{dim,nquad,Tv}}, updates::Int = everything) where {dim,ndof,nquad,Tv}
+function ElementValues(cell::Type{<:ElementType{dim,ndof,Tv}}, quad::QuadRule{dim,nquad,Tv}, updates::Int = everything) where {dim,ndof,nquad,Tv}
     # Precompute the values in the basis functions & gradients.
     ϕs = get_basis_funcs(cell)
     xs = get_points(quad)

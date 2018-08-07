@@ -83,31 +83,31 @@ function generate_field(ns::NTuple{dim,Int}, T = Float64, threads = 2, α = T(10
     @assert all(iseven, ns)
 
     # Allocate an n×n×n matrix that is to FFT'd
-    @time A = RealFFT(T, ns...)
+    A = RealFFT(T, ns...)
 
     A_real = to_real(A)
     A_imag = to_complex(A)
 
     # Fill it with random numbers
-    @time A_real .= randn.(T)
+    A_real .= randn.(T)
 
     # Apply FFT
-    @time A_mul_B!(A_imag, rfft_plan!(A), A_real)
+    A_mul_B!(A_imag, rfft_plan!(A), A_real)
 
     # Transform things in Fourier space
-    @time transform!(A, p)
+    transform!(A, p)
 
     # Apply inverse FFT
-    @time A_mul_B!(A_real, irfft_plan!(A), A_imag)
+    A_mul_B!(A_real, irfft_plan!(A), A_imag)
 
     # Some last transformation
-    @time A_real .= exp.(α .* abs.(A_real))
+    A_real .= exp.(α .* abs.(A_real))
 
     # Save as cell data
     if save
-        @time grid = vtk_grid("file", ntuple(i -> 0 : ns[i], dim)...)
-        @time vtk_cell_data(grid, A_real, "Permeability")
-        @time vtk_save(grid)
+        grid = vtk_grid("file", ntuple(i -> 0 : ns[i], dim)...)
+        vtk_cell_data(grid, A_real, "Permeability")
+        vtk_save(grid)
     end
     
     return A_real
@@ -115,29 +115,39 @@ end
 
 function st1_example(n::Int = 128, elt::Type{<:ElementType} = Tri{Float64}, threads = 2; α = 100.0, p = 1.5, λ = 1.0, save = false)
     mesh = hypercube(elt, n)
-    σs = generate_field(ntuple(i->n, dimension(mesh)), Float64, threads, α, p, save = save)
-    @show extrema(σs)
+    σs_grid = generate_field(ntuple(i->n, dimension(mesh)), Float64, threads, α, p, save = save)
+    σs_el = conductivity_per_cell(mesh, σs_grid)
+    @show extrema(σs_el)
     interior = list_interior_nodes(mesh)
-    @time A = assemble_st1(mesh, σs, λ)
-    b = zeros(size(A, 1))
-    b[div(n, 2) * n] = 1.0
-    # @time b = assemble_vector(mesh, identity)
+    A = assemble_st1(mesh, σs_el, λ)
+    b = assemble_vector(mesh, identity)
     x = zeros(b)
-    @time x[interior] .= A[interior,interior] \ b[interior]
+    x[interior] .= A[interior,interior] \ b[interior]
     
     vtk_grid("st1_example", mesh) do vtk
         vtk_point_data(vtk, x, "x")
     end
 end
 
-@propagate_inbounds σ_in_element(mesh::Mesh{dim}, el::NTuple{M}, σ::AbstractArray{Tv,dim}) where {Tv,dim,M} =
+# Linear interpolation of σ in the mean 
+@propagate_inbounds function σ_in_element(mesh::Mesh{2}, el::NTuple{M}, σ::AbstractArray{Tv,2}) where {Tv,M}
+    mid = mean(get_nodes(mesh, el))
+    P = unsafe_trunc.(Int, mid)
+    diff = mid - P
+
+    A = @SMatrix [σ[P[1]] σ[P[2]]]
+
+    σ[P[1], P[2]] * diff[1] + σ[P[1] + 1, P[2]] * (1 - diff[1])
+    σ[P[1], P[2]] * diff[2] + σ[P[1], P[2] + 1] * (1 - diff[2])
+     
     σ[CartesianIndex(unsafe_trunc.(Int, mean(get_nodes(mesh, el))).data)]
+end
 
 """
 Trivial assembly of the st1 matrix in 2d / 3d without refinements in the cells.
 Here σs[i] is the conducivity in element i.
 """
-function assemble_st1(mesh::Mesh{dim,N,Tv,Ti}, σs::AbstractArray{Tv,dim}, λ::Tv = 1.0) where {dim,N,Tv,Ti}
+function assemble_st1(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{Tv}, λ::Tv = 1.0) where {dim,N,Tv,Ti}
     cell = cell_type(mesh)
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
@@ -154,7 +164,7 @@ function assemble_st1(mesh::Mesh{dim,N,Tv,Ti}, σs::AbstractArray{Tv,dim}, λ::T
         # Reset local matrix
         fill!(A_local, zero(Tv))
 
-        σ = σ_in_element(mesh, element, σs)
+        σ = σs[e_idx]
 
         # For each quad point
         @inbounds for qp = 1 : nquadpoints(quadrature), i = 1:N, j = 1:N
@@ -182,4 +192,40 @@ function assemble_st1(mesh::Mesh{dim,N,Tv,Ti}, σs::AbstractArray{Tv,dim}, λ::T
 
     # Build the sparse matrix
     return sparse(is, js, vs, nnodes(mesh), nnodes(mesh))
+end
+
+"""
+Take a square / cube of conductivity values + a mesh, return a 
+"""
+function conductivity_per_cell(mesh::Mesh{dim,N,Tv,Ti}, σ_grid::AbstractArray{Tv,dim}) where {dim,N,Tv,Ti}
+    σs = Vector{Tv}(nelements(mesh))
+
+    @inbounds for (idx, element) in enumerate(mesh.elements)
+        σs[idx] = σ_in_element(mesh, element, σ_grid)
+    end
+
+    return σs
+end
+
+function another_st1_example(n = 64, α = 1.0, p = 1.0)
+    meshes = [Mesh(SVector{2,Float64}[(5.3,7.2),(20.1,11.4),(9.4,19.4)], [(1,2,3)])]
+    ops = SparseMatrixCSC{Float64,Int}[]
+    As = SparseMatrixCSC{Float64,Int}[]
+    σs_grid = generate_field((n, n), Float64, 4, α, p)
+
+    vtmfile = vtk_multiblock("my_vtm_file")
+
+    for i = 1 : 10
+        mesh = last(meshes)
+        vtkfile = vtk_grid(vtmfile, mesh)
+        σs = conductivity_per_cell(mesh, σs_grid)
+        vtk_cell_data(vtkfile, σs, "conductivity_$i")
+        push!(meshes, refine_uniformly(mesh, times = 1))
+        push!(ops, interpolation_operator(mesh))
+        push!(As, assemble_st1(mesh, σs, 0.0))
+    end
+
+    vtk_save(vtmfile)
+
+    return As, ops
 end

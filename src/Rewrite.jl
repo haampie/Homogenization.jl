@@ -28,7 +28,7 @@ include("multigrid.jl")
 include("apply_local_operators.jl")
 
 include("examples/checkercube.jl")
-# include("../tools/generate_st1_field.jl")
+include("../tools/generate_st1_field.jl")
 include("fast_mv_product.jl")
 
 end
