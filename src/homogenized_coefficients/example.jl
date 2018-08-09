@@ -1,5 +1,6 @@
 using WriteVTK
 using Rewrite
+using IterativeSolvers
 
 """
 Given a 2D / 3D grid of scalar conductivity values, we discretize the operator
@@ -48,8 +49,7 @@ function finite_volume_div_a_grad(σs::AbstractArray{Tv,2}, ξ::NTuple{2,Tv}, h:
 
             # Boundary σ
             ∂σ = (σ_c + σs[yn, xn]) / 2
-            0
-            if 1 < xn < n && 1 < yn < m
+            if 1 < yn < m && 1 < xn < n
                 stencil[5] += ∂σ
                 stencil[i] -= ∂σ
             else
@@ -62,7 +62,7 @@ function finite_volume_div_a_grad(σs::AbstractArray{Tv,2}, ξ::NTuple{2,Tv}, h:
         for (i, (xn, yn)) in enumerate(neighbours)
 
             # Drop "ghost" cells
-            1 < xn < n && 1 < yn < m || continue
+            1 < yn < m && 1 < xn < n || continue
 
             # Store fluxes
             is[idx] = node
@@ -87,35 +87,68 @@ function finite_volume_div_a_grad(σs::AbstractArray{Tv,2}, ξ::NTuple{2,Tv}, h:
     return sparse(is, js, vs, cells, cells), b
 end
 
-function save_stuff(N = 4, ξ = (1/√2, 1/√2), ref = 3)
+function save_stuff(N = 4, ξ = (1/√2, 1/√2), ref = 3, Δt = 1.0)
 
     # Physical width of domain is 2^N, 
     # but we add one cell around it to use σ values for the boundary
     # so basically 2^N + 2h width in total.
     # Grid size h = 2^-ref
     # Number of cells = 2 + 2^(N + ref) along one dimension
-    # We use one additional cell to get a value of σ on the boundary edge
-    # 
 
-    n = 2^(N + ref) + 2
-    # σs = Rewrite.generate_field((n, n), Float64, 8, 20.0, 1.0)
-
-    σs = linspace(0, 1, n).^2 * ones(n)'
-
-    @show extrema(σs) n
-
-    h = 1 / 2^ref
-    xs = linspace(0, 2^N, 2^(N + ref) + 1)
+    L = 2 ^ N
+    n = 2 ^ (N + ref) + 2
+    σs = Rewrite.generate_field((n, n), Float64, 8, 20.0, 1.2)
+    h = 1 / 2 ^ ref
+    xs_boundary = linspace(0, L, n - 1)
+    xs_cell = xs_boundary[1:end-1] .+ h / 2
     A, b = finite_volume_div_a_grad(σs, ξ, h)
-    λ = 0.01
-    # x = (λ*I + A) \ (λ .* b)
+    x = copy(b)
+
+    vtk = vtk_grid("example", xs_cell, xs_cell)
+
+    for Δt = 2 .^ (N-1)
+        scale!(x, 1 / Δt)
+        A_l2 = I / Δt + A
+        x = A_l2 \ x
+        vtk_point_data(vtk, x, "x_$Δt")
+        vtk_point_data(vtk, y, "y_$Δt")
+    end
+
+    @show extrema(σs) n L 16^(N - 1) extrema(x)
+
+    vtk_point_data(vtk, view(σs, 2:n-1, 2:n-1), "σ")
+    vtk_point_data(vtk, b, "b")
+
+    vtk_save(vtk)
+end
+
+"""
+    poisson_example(N, ref)
+
+Solve -Δu = 2∑xᵢ(2^N - xᵢ) on U = [0, 2^N]^2, u = 0 on ∂U
+Exact solution u(x) = ∏xᵢ(2^N - xᵢ).
+Maximum = 16^(N - 1)
+"""
+function poisson_example(N = 4, ref = 3)
+    # Physical width of domain is 2^N, 
+    # but we add one cell around it to use σ values for the boundary
+    # so basically 2^N + 2h width in total.
+    # Grid size h = 2^-ref
+    # Number of cells = 2 + 2^(N + ref) along one dimension
+
+    L = 2^N
+    n = 2^(N + ref) + 2
+    σs = ones(n, n)
+    h = 1 / 2^ref
+    xs_boundary = linspace(0, L, 2^(N + ref) + 1)
+    xs_cell = xs_boundary[1:end-1] .+ h/2
+    A, _ = finite_volume_div_a_grad(σs, (1.0, 0.0), h)
+    b = (2 .* h^2 .* ((xs_cell .* (L .- xs_cell)) .+ (xs_cell .* (L .- xs_cell))'))[:]
     x = A \ b
-
-    vtk = vtk_grid("example", xs, xs)
-
-    vtk_cell_data(vtk, view(σs, 2:n-1, 2:n-1), "σ")
-    vtk_cell_data(vtk, x, "x")
-    vtk_cell_data(vtk, b, "b")
-
+    @show L 16^(N - 1) - maximum(x)
+    vtk = vtk_grid("poisson", xs_cell, xs_cell)
+    vtk_point_data(vtk, view(σs, 2:n-1, 2:n-1), "σ")
+    vtk_point_data(vtk, x, "x")
+    vtk_point_data(vtk, b, "b")
     vtk_save(vtk)
 end
