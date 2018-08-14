@@ -9,7 +9,7 @@ struct ElementId{Ti}
 end
 
 """
-Wraps a cell (set of nodes, either a node, an edge or a face) and metadata (element index & 
+Wraps a cell (set of nodes, either a node, an edge or a face) and metadata (element index &
 local index.)
 """
 struct CellToEl{N,Ti}
@@ -82,7 +82,7 @@ the second only has nodes that are on the interface between elements.
 function node_to_elements(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     node_list = list_nodes_with_element(mesh)
     radix_sort!(node_list, nnodes(mesh), 1)
-    all_nodes = copy(node_list)    
+    all_nodes = copy(node_list)
     remove_singletons!(node_list)
     return compress(all_nodes), compress(node_list)
 end
@@ -122,7 +122,7 @@ face_to_elements(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti} = empty_map(Val{3}
 Make a list of all faces with their corresponding element index and their local face number.
 """
 function list_faces_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
-    face_list = Vector{FaceToEl{Ti}}(4 * nelements(mesh))
+    face_list = Vector{FaceToEl{Ti}}(undef, 4 * nelements(mesh))
     idx = 1
     @inbounds for (el_idx, el) in enumerate(mesh.elements)
         face_list[idx + 0] = FaceToEl{Ti}((el[1], el[2], el[3]), ElementId(el_idx, 1))
@@ -140,7 +140,7 @@ end
 Make a list of all edges with their corresponding element index and their local edge number.
 """
 function list_edges_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
-    edge_list = Vector{EdgeToEl{Ti}}(6 * nelements(mesh))
+    edge_list = Vector{EdgeToEl{Ti}}(undef, 6 * nelements(mesh))
     idx = 1
     @inbounds for (el_idx, el) in enumerate(mesh.elements)
         edge_list[idx + 0] = EdgeToEl{Ti}((el[1], el[2]), ElementId(el_idx, 1))
@@ -155,7 +155,7 @@ function list_edges_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
 end
 
 function list_edges_with_element(mesh::Tris{Tv,Ti}) where {Tv,Ti}
-    edge_list = Vector{EdgeToEl{Ti}}(3 * nelements(mesh))
+    edge_list = Vector{EdgeToEl{Ti}}(undef, 3 * nelements(mesh))
     idx = 1
     @inbounds for (el_idx, el) in enumerate(mesh.elements)
         edge_list[idx + 0] = EdgeToEl{Ti}((el[1], el[2]), ElementId(el_idx, 1))
@@ -172,7 +172,7 @@ end
 Make a list of all nodes with their corresponding element index and their local node number.
 """
 function list_nodes_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
-    node_list = Vector{NodeToEl{Ti}}(4 * nelements(mesh))
+    node_list = Vector{NodeToEl{Ti}}(undef, 4 * nelements(mesh))
     idx = 1
     @inbounds for (el_idx, el) in enumerate(mesh.elements)
         node_list[idx + 0] = NodeToEl{Ti}((el[1],), ElementId(el_idx, 1))
@@ -185,7 +185,7 @@ function list_nodes_with_element(mesh::Tets{Tv,Ti}) where {Tv,Ti}
 end
 
 function list_nodes_with_element(mesh::Tris{Tv,Ti}) where {Tv,Ti}
-    node_list = Vector{NodeToEl{Ti}}(3 * nelements(mesh))
+    node_list = Vector{NodeToEl{Ti}}(undef, 3 * nelements(mesh))
     idx = 1
     @inbounds for (el_idx, el) in enumerate(mesh.elements)
         node_list[idx + 0] = NodeToEl{Ti}((el[1],), ElementId(el_idx, 1))
@@ -215,7 +215,7 @@ function list_boundary_nodes_edges_faces(m::Tets{Tv,Ti}) where {Tv,Ti}
     remove_repeated_pairs!(faces)
 
     # Convert to sorted list of boundary edges
-    boundary_edges = Vector{Tuple{Ti,Ti}}(3 * length(faces))
+    boundary_edges = Vector{Tuple{Ti,Ti}}(undef, 3 * length(faces))
 
     idx = 1
     @inbounds for face in faces
@@ -236,7 +236,7 @@ function list_boundary_nodes_edges_faces(m::Tets{Tv,Ti}) where {Tv,Ti}
     intersect!(edges, boundary_edges)
 
     # Convert to sorted list of boundary nodes
-    boundary_nodes = Vector{Tuple{Ti}}(2 * length(boundary_edges))
+    boundary_nodes = Vector{Tuple{Ti}}(undef, 2 * length(boundary_edges))
     idx = 1
     @inbounds for edge in boundary_edges
         boundary_nodes[idx + 0] = (edge[1],)
@@ -263,7 +263,7 @@ function list_boundary_nodes_edges_faces(m::Tris{Tv,Ti}) where {Tv,Ti}
     remove_repeated_pairs!(edges)
 
     # Convert to sorted list of boundary nodes
-    boundary_nodes = Vector{Tuple{Ti}}(2 * length(edges))
+    boundary_nodes = Vector{Tuple{Ti}}(undef, 2 * length(edges))
 
     idx = 1
     @inbounds for edge in edges
@@ -311,7 +311,7 @@ end
 """
     compress(v::Vector{CellToEl{N,Ti}}) -> SparseCellToElementMap
 
-Compress a mapping from nodes, edges or faces to elements similar as what 
+Compress a mapping from nodes, edges or faces to elements similar as what
 `sparse` does for a set of triplets.
 """
 function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
@@ -323,9 +323,9 @@ function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
         end
     end
 
-    offset = Vector{Ti}(unique + 1)
-    values = Vector{ElementId{Ti}}(length(v))
-    cells = Vector{NTuple{N,Ti}}(unique)
+    offset = Vector{Ti}(undef, unique + 1)
+    values = Vector{ElementId{Ti}}(undef, length(v))
+    cells = Vector{NTuple{N,Ti}}(undef, unique)
 
     @inbounds begin
         offset[1] = 1
@@ -336,7 +336,7 @@ function compress(v::Vector{CellToEl{N,Ti}}) where {N,Ti}
         for i = 2 : length(v)
             values[i] = v[i].data
 
-            # If we find a new cell, update the bookkeeping of offset pointers, 
+            # If we find a new cell, update the bookkeeping of offset pointers,
             # and update the value.
             if v[i] != v[i - 1]
                 cells[idx += 1] = v[i].nodes

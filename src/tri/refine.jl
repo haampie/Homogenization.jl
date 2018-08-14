@@ -8,14 +8,14 @@ function refine_uniformly(mesh::Tris{Tv,Ti}, graph::SparseGraph) where {Tv,Ti}
     Ne = length(graph.adj)
 
     # Each edge is split 2, so Nn + Ne is the number of nodes
-    nodes = Vector{SVector{2,Tv}}(Nn + Ne)
+    nodes = Vector{SVector{2,Tv}}(undef, Nn + Ne)
 
     # Each triangle is split in 4, so 4Nt triangles
-    triangles = Vector{NTuple{3,Ti}}(4Nt)
+    triangles = Vector{NTuple{3,Ti}}(undef, 4Nt)
 
     # Keep the old nodes in place
-    copy!(nodes, mesh.nodes)
-    
+    copyto!(nodes, mesh.nodes)
+
     # Add the new ones
     idx = Nn + 1
     @inbounds for i = 1 : length(graph.ptr) - 1, j = graph.ptr[i] : graph.ptr[i + 1] - 1

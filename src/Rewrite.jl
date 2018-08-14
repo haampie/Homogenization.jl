@@ -1,6 +1,7 @@
 module Rewrite
 
 using StaticArrays, WriteVTK
+using SparseArrays, LinearAlgebra, Random, SuiteSparse
 
 export Mesh, refine_uniformly
 

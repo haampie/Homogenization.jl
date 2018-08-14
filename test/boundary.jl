@@ -1,11 +1,11 @@
 using Rewrite: Mesh, refine_uniformly, list_boundary_edges, compress
 using StaticArrays
-using Base.Test
+using Test
 
 @testset "Find boundary stuff" begin
     # Unit cube
     nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
-    
+
     # Split in tetrahedra
     elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
 

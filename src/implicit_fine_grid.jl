@@ -46,8 +46,8 @@ function construct_full_grid(g::ImplicitFineGrid{dim,N,Tv,Ti}, level::Int) where
     total_nodes = nelements(base) * nnodes(ref_mesh)
     total_elements = nelements(base) * nelements(ref_mesh)
 
-    nodes = Vector{SVector{dim,Tv}}(total_nodes)
-    elements = Vector{NTuple{N,Ti}}(total_elements)
+    nodes = Vector{SVector{dim,Tv}}(undef, total_nodes)
+    elements = Vector{NTuple{N,Ti}}(undef, total_elements)
 
     # Now for each base element we simply apply the coordinate transform to each
     # node, and we copy over each fine element. We only have to renumber the
@@ -60,7 +60,7 @@ function construct_full_grid(g::ImplicitFineGrid{dim,N,Tv,Ti}, level::Int) where
     @inbounds for element in base.elements
         # Get the coordinate mapping
         J, b = affine_map(base, element)
-        
+
         # Copy the transformed nodes over
         for node in ref_mesh.nodes
             nodes[node_idx += 1] = J * node + b
@@ -87,7 +87,7 @@ end
     apply_constraint!(x, level, ::ZeroDirichletConstraint, ::ImplicitFineGrid)
 
 Apply zero Dirichlet conditions to the nodes on the boundary of implicitly refined
-vector `u`. ZeroDirichletConstraint contains the faces, edges and nodes of the 
+vector `u`. ZeroDirichletConstraint contains the faces, edges and nodes of the
 base mesh, and via the ImplicitFineGrid we get the local numbering of the faces,
 edges and nodes to zero them out.
 """
@@ -391,7 +391,7 @@ Build a local rhs with functional ∫v
 function local_rhs!(b::AbstractMatrix, implicit::ImplicitFineGrid{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     base = base_mesh(implicit)
     fine = refined_mesh(implicit, nlevels(implicit))
-    
+
     @assert size(b) == (nnodes(fine), nelements(base))
 
     # Construct b on the reference element

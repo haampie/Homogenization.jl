@@ -3,7 +3,7 @@ using Rewrite: Mesh, refine_uniformly, sort_element_nodes!, nnodes, nelements,
                construct_full_grid
 using StaticArrays
 using WriteVTK
-using Base.Test
+using Test
 
 @testset "test_interpolation" begin
     total_levels = 6
@@ -14,7 +14,7 @@ using Base.Test
     implicit = ImplicitFineGrid(coarse_mesh, total_levels)
 
     direction = randn(3)
-    
+
     xs = map(x -> 10.0 + dot(x, direction), nodes)
     ys = zeros(nnodes(refined_mesh(implicit, 1)), nelements(base_mesh(implicit)))
 

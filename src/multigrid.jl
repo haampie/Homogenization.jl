@@ -1,7 +1,7 @@
-using Base.LinAlg.axpy!
+using LinearAlgebra: axpy!
 
 """
-Each level state vector is basically a matrix of 
+Each level state vector is basically a matrix of
 size (# nodes per ref el) × (# number of base elements).
 """
 struct LevelState{T,Tv<:AbstractMatrix{T}}
@@ -15,8 +15,8 @@ Construct a new state wrapper.
 """
 function LevelState(total_base_elements::Int, total_fine_nodes::Int, Tv::Type{<:Number})
     x = zeros(Tv, total_fine_nodes, total_base_elements)
-    b = zeros(x)
-    r = zeros(x)
+    b = zero(x)
+    r = zero(x)
     LevelState{Tv,typeof(x)}(x, b, r)
 end
 
@@ -31,8 +31,8 @@ struct BaseLevel{Tfact,Tv,Ti,Tlocal<:AbstractVector{Tv}}
 end
 
 function BaseLevel(Tv::Type{<:Number}, F, total_nodes::Integer, interior_nodes::Vector{Ti}) where {Ti <: Integer}
-    b = Vector{Tv}(total_nodes)
-    b_interior = Vector{Tv}(length(interior_nodes))
+    b = Vector{Tv}(undef, total_nodes)
+    b_interior = Vector{Tv}(undef, length(interior_nodes))
     BaseLevel{typeof(F),Tv,Ti,Vector{Tv}}(F, b, b_interior, interior_nodes)
 end
 
@@ -46,7 +46,7 @@ function smoothing_step!(implicit::ImplicitFineGrid, ops::LocalLinearOperator, �
     # Global residual
     broadcast_interfaces!(curr.r, implicit, k)
 
-    # x ← x + ω * r 
+    # x ← x + ω * r
     axpy!(ω, curr.r, curr.x)
 end
 
@@ -58,8 +58,8 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Loca
         copy_to_base!(base.b, levels[1].b, implicit)
 
         # Copy the interior over.
-        copy!(base.b_interior, view(base.b, base.interior_nodes))
-        
+        copyto!(base.b_interior, view(base.b, base.interior_nodes))
+
         # Unfortunately this allocates :s
         tmp = base.A_inv \ base.b_interior
 

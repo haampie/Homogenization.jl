@@ -1,5 +1,5 @@
 using Rewrite: compress, EdgeToEl, ElementId
-using Base.Test
+using Test
 
 @testset "Sparse cell to element" begin
     let sparse_map = compress([

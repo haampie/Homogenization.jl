@@ -10,13 +10,13 @@ function assemble_matrix(mesh::Mesh{dim,N,Tv,Ti}, bf::Function) where {dim,N,Tv,
     Nt = nelements(mesh)
     Nn = nnodes(mesh)
     Nq = nquadpoints(quadrature)
-        
+
     # We'll pre-allocate the triples (is, js, vs) that are used to
     # construct the sparse matrix A
-    is = Vector{Int64}(N * N * Nt)
-    js = Vector{Int64}(N * N * Nt)
-    vs = Vector{Tv}(N * N * Nt)
-    
+    is = Vector{Int64}(undef, N * N * Nt)
+    js = Vector{Int64}(undef, N * N * Nt)
+    vs = Vector{Tv}(undef, N * N * Nt)
+
     # The local system matrix
     A_local = zeros(N, N)
 
@@ -66,13 +66,13 @@ function assemble_matrix_2(mesh::Mesh{dim,N,Tv,Ti}, bf::Function, quad::QuadRule
 
     Nt = nelements(mesh)
     Nn = nnodes(mesh)
-        
+
     # We'll pre-allocate the triples (is, js, vs) that are used to
     # construct the sparse matrix A
-    is = Vector{Int64}(N * N * Nt)
-    js = Vector{Int64}(N * N * Nt)
-    vs = Vector{Tv}(N * N * Nt)
-    
+    is = Vector{Int64}(undef, N * N * Nt)
+    js = Vector{Int64}(undef, N * N * Nt)
+    vs = Vector{Tv}(undef, N * N * Nt)
+
     # The local system matrix
     A_local = zeros(N, N)
 
@@ -127,7 +127,7 @@ function assemble_vector(mesh::Mesh{dim,N,Tv,Ti}, functional::Function) where {d
     Nt = nelements(mesh)
     Nn = nnodes(mesh)
     Nq = nquadpoints(quadrature)
-        
+
     b = zeros(Nn)
     b_local = zeros(Tv, N)
 

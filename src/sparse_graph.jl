@@ -11,7 +11,7 @@ end
 Given a sorted edge between nodes (n1 → n2), return the natural index of the edge.
 Costs are O(log b) where b is the connectivity
 """
-edge_index(graph::SparseGraph{Ti}, n1::Ti, n2::Ti) where {Ti <: Integer} = 
+edge_index(graph::SparseGraph{Ti}, n1::Ti, n2::Ti) where {Ti <: Integer} =
     binary_search(graph.adj, n2, graph.ptr[n1], graph.ptr[n1 + 1] - one(Ti))
 
 """
@@ -34,7 +34,7 @@ function edge_graph(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     end
 
     # Build adjacency list
-    adj = Vector{Ti}(ptr[end] - 1)
+    adj = Vector{Ti}(undef, ptr[end] - 1)
     indices = copy(ptr)
 
     @inbounds for element in mesh.elements, i = 1 : N, j = i + 1 : N
@@ -57,8 +57,8 @@ function remove_duplicates!(g::SparseGraph)
 
     @inbounds for next = 2 : Nn + 1
         last = g.ptr[next]
-        
-        # If there is an edge going out from `node` copy the first one to the 
+
+        # If there is an edge going out from `node` copy the first one to the
         # `slow` position and copy the remaining unique edges after it
         if fast < last
 

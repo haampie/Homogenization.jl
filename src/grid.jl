@@ -91,7 +91,7 @@ of indices.
 end
 
 @propagate_inbounds function get_nodes(m::Mesh{dim,N,Tv,Ti}, element::NTuple{M,Ti}) where {dim,N,Tv,Ti,M}
-    ntuple(i -> m.nodes[element[i]], Val{M})
+    ntuple(i -> m.nodes[element[i]], M)
 end
 
 """
@@ -124,7 +124,7 @@ List the faces of tets
 function list_faces(m::Mesh{3,4,Tv,Ti}) where {Tv,Ti}
     @assert all(issorted, m.elements)
 
-    faces = Vector{NTuple{3,Ti}}(4 * nelements(m))
+    faces = Vector{NTuple{3,Ti}}(undef, 4 * nelements(m))
     idx = 1
     @inbounds for el in m.elements
         faces[idx + 0] = (el[1], el[2], el[3])
@@ -141,8 +141,8 @@ List the "faces" of triangles, i.e. edges.
 """
 function list_faces(m::Mesh{2,3,Tv,Ti}) where {Tv,Ti}
     @assert all(issorted, m.elements)
-    
-    faces = Vector{NTuple{2,Ti}}(3 * nelements(m))
+
+    faces = Vector{NTuple{2,Ti}}(undef, 3 * nelements(m))
     idx = 1
     @inbounds for el in m.elements
         faces[idx + 0] = (el[1], el[2])
@@ -165,14 +165,18 @@ function list_interior_nodes(m::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     remove_repeated_pairs!(faces)
 
     # Reinterpret at list of nodes [n1,n2,n3]
-    nodes = reinterpret(Tuple{Ti},faces)
+    nodes_unsorted = reinterpret(Tuple{Ti},faces)
 
     # Sort them once more
-    radix_sort!(nodes, nnodes(m))
+    radix_sort!(nodes_unsorted, nnodes(m))
+
+    # Copy them as list of nodes -- unfortunately Julia 1.0 has some issues with
+    # resizing reinterpreted stuff, so just collect the thing.
+    nodes = collect(reinterpret(Ti, nodes_unsorted))
 
     # Remove duplicates.
     remove_duplicates!(nodes)
 
     # Return the interior nodes
-    complement(reinterpret(Ti, nodes), nnodes(m))
+    complement(nodes, nnodes(m))
 end

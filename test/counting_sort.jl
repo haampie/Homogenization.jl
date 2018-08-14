@@ -1,4 +1,4 @@
-using Base.Test
+using Test
 
 using Rewrite: radix_sort!, generate_random_elements, sort_element_nodes!
 

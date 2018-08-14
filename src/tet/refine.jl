@@ -8,8 +8,8 @@ function refine_uniformly(mesh::Tets{Tv,Ti}, graph::SparseGraph) where {Tv,Ti}
     Ne = length(graph.adj)
 
     ### Refine the grid.
-    nodes = Vector{SVector{3,Tv}}(Nn + Ne)
-    copy!(nodes, mesh.nodes)
+    nodes = Vector{SVector{3,Tv}}(undef, Nn + Ne)
+    copyto!(nodes, mesh.nodes)
 
     ## Split the edges
     @inbounds begin
@@ -21,8 +21,8 @@ function refine_uniformly(mesh::Tets{Tv,Ti}, graph::SparseGraph) where {Tv,Ti}
     end
 
     ## Next, build new tetrahedrons...
-    tets = Vector{NTuple{4,Ti}}(8Nt)
-    parts = Vector{Ti}(10)
+    tets = Vector{NTuple{4,Ti}}(undef, 8Nt)
+    parts = Vector{Ti}(undef, 10)
 
     tet_idx = 1
     offset = Ti(Nn)
@@ -43,7 +43,7 @@ function refine_uniformly(mesh::Tets{Tv,Ti}, graph::SparseGraph) where {Tv,Ti}
         end
 
         # Generate new tets!
-        for (a,b,c,d) in ((1,5,6,7), (5,2,8,9), (6,8,3,10), (7,9,10,4), 
+        for (a,b,c,d) in ((1,5,6,7), (5,2,8,9), (6,8,3,10), (7,9,10,4),
                           (5,6,7,9), (5,6,8,9), (6,7,9,10), (6,8,9,10))
             tets[tet_idx] = (parts[a], parts[b], parts[c], parts[d])
             tet_idx += 1

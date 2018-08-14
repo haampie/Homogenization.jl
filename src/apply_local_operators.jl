@@ -1,4 +1,4 @@
-import Base.LinAlg: A_mul_B!
+import LinearAlgebra: mul!
 using Base.Threads: @threads, nthreads
 
 """
@@ -6,10 +6,10 @@ Compute the residual r = b - A * x locally on each subdomain.
 """
 function local_residual!(implicit::ImplicitFineGrid, A::SimpleDiffusion, curr::LevelState, k::Int)
     # r ← b
-    copy!(curr.r, curr.b)
+    copyto!(curr.r, curr.b)
 
     # r ← r - Ax = b - Ax
-    A_mul_B!(-1.0, implicit.base, A, curr.x, curr.r)
+    mul!(-1.0, implicit.base, A, curr.x, curr.r)
 
     # Apply the boundary condition.
     apply_constraint!(curr.r, k, A.bc, implicit)
@@ -17,10 +17,10 @@ end
 
 function local_residual!(implicit::ImplicitFineGrid, A::L2PlusDivAGrad, curr::LevelState, k::Int)
     # r ← b
-    copy!(curr.r, curr.b)
+    copyto!(curr.r, curr.b)
 
     # r ← r - Ax = b - Ax
-    A_mul_B!(-1.0, implicit.base, A, curr.x, curr.r)
+    mul!(-1.0, implicit.base, A, curr.x, curr.r)
 
     # Apply the boundary condition.
     apply_constraint!(curr.r, k, A.constraint, implicit)
@@ -32,12 +32,12 @@ end
 ### SimpleDiffusion MV-product
 
 """
-    A_mul_B!(α, ::ImplicitFineGrid, ::SimpleDiffusion, level, x, y)
+    mul!(α, ::ImplicitFineGrid, ::SimpleDiffusion, level, x, y)
 
 Compute `y ← α * A * x + y` in a distributed fashion. Note that it does not zero
 out `y`. (todo)
 """
-function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, A::SimpleDiffusion, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+function mul!(α::Tv, base::Mesh{dim,N,Tv,Ti}, A::SimpleDiffusion, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
 
     # Circular distribution
     @threads for t = 1 : nthreads()
@@ -77,12 +77,12 @@ end
 ### L2PlusDivAGrad MV-product
 
 """
-    A_mul_B!(α, ::ImplicitFineGrid, ::L2PlusDivAGrad, level, x, y)
+    mul!(α, ::ImplicitFineGrid, ::L2PlusDivAGrad, level, x, y)
 
 Compute `y ← α * A * x + y` in a distributed fashion. Note that it does not zero
 out `y`. (todo)
 """
-function A_mul_B!(α::Tv, base::Mesh{dim,N,Tv,Ti}, A::L2PlusDivAGrad, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
+function mul!(α::Tv, base::Mesh{dim,N,Tv,Ti}, A::L2PlusDivAGrad, x::AbstractMatrix{Tv}, y::AbstractMatrix{Tv}) where {dim,N,Tv,Ti}
 
     # Circular distribution
     @threads for t = 1 : nthreads()

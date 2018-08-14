@@ -1,3 +1,5 @@
+using Statistics: mean
+
 # There's probably a nicer way to do this, but let's just define
 # the weighted dot product like this for 2D and 3D.
 @propagate_inbounds function weighted_dot(∇u::SVector{3}, σ::SVector{3}, ∇v::SVector{3})
@@ -16,9 +18,9 @@ function assemble_checkercube(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{SVector{dim,T
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
     element_values = ElementValues(cell, quadrature, update_gradients | update_det_J)
-    
+
     total = N * N * nelements(mesh)
-    is, js, vs = Vector{Ti}(total), Vector{Ti}(total), Vector{Tv}(total)
+    is, js, vs = Vector{Ti}(undef, total), Vector{Ti}(undef, total), Vector{Tv}(undef, total)
     A_local = zeros(N, N)
 
     idx = 1
@@ -65,9 +67,9 @@ function partial_derivatives_functionals(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,T
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
     element_values = ElementValues(cell, quadrature, update_gradients | update_det_J)
-    
+
     bs = zeros(Tv,dim,nnodes(mesh))
-    
+
     b_local = zeros(dim, N)
 
     idx = 1
@@ -94,8 +96,7 @@ function partial_derivatives_functionals(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,T
         end
     end
 
-    # Build the sparse matrix
-    return reinterpret(SVector{dim,Tv}, reshape(bs, :))
+    return collect(reshape(reinterpret(SVector{dim,Tv}, bs), :))
 end
 
 """
@@ -107,7 +108,7 @@ function rhs_aξ∇v!(b::AbstractMatrix, ∂ϕ∂xᵢs::Vector{SVector{dim,Tv}},
     # Build a rhs on the finest level of the reference cell
     base = base_mesh(implicit)
     fine = refined_mesh(implicit, nlevels(implicit))
-    
+
     @assert size(b) == (nnodes(fine), nelements(base))
 
     cell = cell_type(base)
@@ -117,7 +118,7 @@ function rhs_aξ∇v!(b::AbstractMatrix, ∂ϕ∂xᵢs::Vector{SVector{dim,Tv}},
 
     @inbounds for (idx, element) in enumerate(base.elements)
         reinit!(element_values, base, element)
-        
+
         detJ = get_det_jac(element_values)
         Jinv = get_inv_jac(element_values)
         σ = σs[idx]
@@ -149,7 +150,7 @@ For convenience this guy will just return a vector `v` s.t. `v[el_idx]` is a
 tuple of the conductivity in all spatial directions in that element.
 """
 function conductivity_per_element(mesh::Mesh{dim}, σ::Conductivity{Tv,dim}) where {Tv,dim}
-    σ_el = Vector{SVector{dim,Tv}}(nelements(mesh))
+    σ_el = Vector{SVector{dim,Tv}}(undef, nelements(mesh))
 
     for (idx, el) in enumerate(mesh.elements)
         indices = unsafe_trunc.(Int, mean(get_nodes(mesh, el))).data
@@ -205,7 +206,7 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
 
     ### Coarse grid.
     interior = list_interior_nodes(base)
-    F = cholfact(assemble_checkercube(base, σ_per_el, 0.0)[interior,interior])
+    F = cholesky(assemble_checkercube(base, σ_per_el, 0.0)[interior,interior])
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
     ### Fine grid
@@ -247,8 +248,8 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
 
         # Compute increment in σ and residual norm
         zero_out_all_but_one!(finest_level.r, implicit, refinements)
-        push!(rs, vecnorm(finest_level.r))
-        @show last(rs)
+        push!(rs, norm(finest_level.r))
+        # @show last(rs)
     end
 
     full_mesh = construct_full_grid(implicit, 1)
@@ -267,21 +268,22 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     ξ /= norm(ξ)
 
     # Generate conductivity
-    srand(1)
+    Random.seed!(1)
     σ = generate_conductivity(base, n)
     σ_per_el = conductivity_per_element(base, σ)
 
-    ### Coarse grid.
+    @info "Building a coarse grid"
     interior = list_interior_nodes(base)
-    F = cholfact(assemble_checkercube(base, σ_per_el, 1.0)[interior,interior])
+    F = cholesky(assemble_checkercube(base, σ_per_el, 1.0)[interior,interior])
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
-    ### Fine grid
+    @info "Building implicit grid"
     implicit = ImplicitFineGrid(base, refinements)
     nodes, edges, faces = list_boundary_nodes_edges_faces(implicit.base)
     constraint = ZeroDirichletConstraint(nodes, edges, faces)
 
-    @show implicit
+    @info "Built!" implicit
+    @info "Building diffusion operators and mass matrices"
 
     # Build the local operators.
     diff_terms = build_local_diffusion_operators(implicit.reference)
@@ -290,6 +292,8 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
         diff, mass = op
         L2PlusDivAGrad(diff, mass, constraint, 1.0, σ_per_el)
     end
+
+    @info "Allocating state vectors x, b and r"
 
     # Allocate state vectors x, b and r on all levels.
     level_states = map(1 : refinements) do i
@@ -302,16 +306,16 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     # Allocate previous v
     v_prev = similar(finest_level.x)
 
-    # Initialize a random x.
+    @info "Initializing a random x with zero b.c."
     rand!(finest_level.x)
     broadcast_interfaces!(finest_level.x, implicit, refinements)
     apply_constraint!(finest_level.x, refinements, constraint, implicit)
 
-    # Construct a r.h.s.
+    @info "Building the initial local r.h.s."
     ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, refinements))
     rhs_aξ∇v!(finest_level.b, ∂ϕ∂xᵢs, implicit, σ_per_el, ξ)
 
-    ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 1
+    ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 2.0
 
     center = @SVector fill(0.5 * n + 1, dimension(base))
     radius = float(div(n, 2) - 10)
@@ -324,19 +328,18 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     λ = 1.0
 
     for k = 0 : k_max
-        println("Step ", k)
+        @info "Next outer step" k
 
         # Keep track of increments in σ and residual norms of multigrid
         σs_k = Float64[]
         rs_k = Float64[]
 
         # Construct a coarse grid operator
-        F = cholfact(assemble_checkercube(base, σ_per_el, λ)[interior,interior])
+        F = cholesky(assemble_checkercube(base, σ_per_el, λ)[interior,interior])
         base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
         # Solve the next problem
         for i = 1 : max_cycles
-            println("Cycle ", i)
             vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, smoothing_steps)
 
             # Initial rhs is special
@@ -350,9 +353,9 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
             # Compute increment in σ and residual norm
             zero_out_all_but_one!(finest_level.r, implicit, refinements)
             push!(σs_k, 2^k * sum(local_sum) / area(ops, implicit, subset))
-            push!(rs_k, vecnorm(finest_level.r))
+            push!(rs_k, norm(finest_level.r))
 
-            @show last(rs_k) last(σs_k)
+            @info "Next multigrid step" i last(rs_k) last(σs_k)
 
             # Check convergence
             if i > 1
@@ -362,7 +365,7 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
         end
 
         # Our current x becomes our previous x; keep x as initial guess for next round
-        copy!(v_prev, finest_level.x)
+        copyto!(v_prev, finest_level.x)
         λ /= 2
 
         # Update the fine grid operator (just λ)
@@ -400,7 +403,7 @@ Returns an ordered list of cell indices that have a centerpoint at most `radius`
 away from `center` in the infinity norm.
 """
 function select_cells_to_integrate_over(mesh::Mesh{dim,N,Tv,Ti}, center::SVector{dim,Tv}, radius::Tv) where {dim,N,Tv,Ti}
-    indices = Vector{Ti}(nelements(mesh))
+    indices = Vector{Ti}(undef, nelements(mesh))
 
     idx = 0
     for (i, el) in enumerate(mesh.elements)
@@ -433,7 +436,7 @@ function sum_first_term!(local_sum::Vector{Tv}, v₀::AbstractMatrix{Tv}, ∂ϕ�
 
     @inbounds for idx in subset
         reinit!(element_values, base, base.elements[idx])
-        
+
         detJ = get_det_jac(element_values)
         Jinv = get_inv_jac(element_values)
         σ = σs[idx]
@@ -445,7 +448,7 @@ function sum_first_term!(local_sum::Vector{Tv}, v₀::AbstractMatrix{Tv}, ∂ϕ�
         end
 
         # Multiply with mass
-        A_mul_B!(Mv₀_local, ops.mass, v₀_local)
+        mul!(Mv₀_local, ops.mass, v₀_local)
 
         total = zero(Tv)
 
@@ -480,7 +483,7 @@ function sum_terms!(local_sum::Vector{Tv}, vₖ, vₖ₋₁, implicit::ImplicitF
         end
 
         # Multiply with mass
-        A_mul_B!(Mvₖ_local, ops.mass, vₖ_local)
+        mul!(Mvₖ_local, ops.mass, vₖ_local)
 
         # Inner product
         total = zero(Tv)
@@ -503,7 +506,7 @@ function area(ops::L2PlusDivAGrad, implicit::ImplicitFineGrid, subset::Vector{Ti
     cell = cell_type(base)
     quadrature = default_quad(cell)
     element_values = ElementValues(cell, quadrature, update_det_J)
-    
+
     M_total = sum(ops.mass)
     area = 0.0
 
@@ -525,14 +528,14 @@ function next_rhs!(b::AbstractMatrix{Tv}, x::AbstractMatrix{Tv}, implicit::Impli
     cell = cell_type(base)
     quadrature = default_quad(cell)
     element_values = ElementValues(cell, quadrature, update_det_J)
-    
+
     fill!(b, zero(Tv))
 
     @inbounds for idx = 1 : nelements(base)
         reinit!(element_values, base, base.elements[idx])
         detJ = get_det_jac(element_values)
         offset = (idx - 1) * size(x, 1)
-    
+
         # b ← λ * |J| * M * x + b
         my_A_mul_B!(ops.λ * detJ, ops.mass, x, b, offset)
     end

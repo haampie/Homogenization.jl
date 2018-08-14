@@ -1,5 +1,5 @@
-using Base.Test
-using Rewrite: sort_element_nodes!, refine_uniformly, Mesh, 
+using Test
+using Rewrite: sort_element_nodes!, refine_uniformly, Mesh,
                ImplicitFineGrid, cell_type, default_quad, update_J,
                ElementValues, refined_mesh, nodes_per_face_interior, reinit!,
                get_x, valrange
@@ -9,7 +9,7 @@ using StaticArrays
     # Refinements
     refs = 5
 
-    # Cube    
+    # Cube
     nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
     elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
     coarse_mesh = refine_uniformly(Mesh(nodes, elements), times = 3)
@@ -50,7 +50,7 @@ using StaticArrays
 
         # Loop over all edges on some interface
         @inbounds for i = 1 : length(e2e.cells)
-            
+
             # Loop over all the elements belonging to this face
             xs_per_element = map(valrange(e2e, i)) do j
                 value = e2e.values[j]
@@ -71,7 +71,7 @@ using StaticArrays
 
         # Loop over all faces on some interface
         @inbounds for i = 1 : length(f2e.cells)
-            
+
             # Loop over all the elements belonging to this face
             xs_per_element = map(valrange(f2e, i)) do j
                 value = f2e.values[j]
@@ -85,7 +85,7 @@ using StaticArrays
             end
 
             all(isempty, xs_per_element) && continue
-            
+
             # Test if the others are equal to the first
             @test all(x -> x ≈ first(xs_per_element), xs_per_element)
         end

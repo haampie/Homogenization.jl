@@ -1,5 +1,5 @@
+using Test
 using Rewrite: sort_bitonic
-using Base.Test
 
 @testset "Bitonic sorting tricks" begin
 

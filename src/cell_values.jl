@@ -1,4 +1,4 @@
-using ForwardDiff.gradient
+using ForwardDiff: gradient
 using Base: @propagate_inbounds
 
 abstract type QuadRule{dim,nquad,Tv} end
@@ -104,17 +104,17 @@ end
 @propagate_inbounds function reinit!(c::ElementValues, m::Mesh, element)
 
     if should(c, update_J)
-        J, shift = affine_map(m, element) 
-        copy!(c.jacobian, J)
-        copy!(c.offset, shift)
+        J, shift = affine_map(m, element)
+        copyto!(c.jacobian, J)
+        copyto!(c.offset, shift)
     end
 
     if should(c, update_inv_J)
-        copy!(c.inv_jacobian, inv(c.jacobian'))
+        copyto!(c.inv_jacobian, inv(c.jacobian'))
     end
 
     if should(c, update_gradients)
-        A_mul_B!(c.gradients, c.inv_jacobian, c.ref_gradients)
+        mul!(c.gradients, c.inv_jacobian, c.ref_gradients)
     end
 
     if should(c, update_det_J)
@@ -122,7 +122,7 @@ end
     end
 
     if should(c, update_x)
-        copy!(c.xs, c.jacobian * c.xs .+ c.offset)
+        copyto!(c.xs, c.jacobian * c.xs .+ c.offset)
     end
 end
 

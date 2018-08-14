@@ -1,8 +1,8 @@
-using Rewrite: cube, nnodes, nelements
-using Base.Test
+using Rewrite: hypercube, Tet, nnodes, nelements
+using Test
 
 @testset "cube" begin
-    mesh = cube(20)
+    mesh = hypercube(Tet{Float64}, 20)
 
     @test all(issorted, mesh.elements)
     @test nnodes(mesh) == 21 * 21 * 21

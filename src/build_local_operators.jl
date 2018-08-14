@@ -54,12 +54,12 @@ function _build_local_diffusion_operators(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,
     Nt = nelements(mesh)
     Nn = nnodes(mesh)
     Nq = nquadpoints(quadrature)
-        
+
     # We'll pre-allocate the triples (is, js, vs)
-    Is = [Vector{Ti}(N * N * Nt) for i = 1 : dim, j = 1 : dim]
-    Js = [Vector{Ti}(N * N * Nt) for i = 1 : dim, j = 1 : dim]
-    Vs = [Vector{Tv}(N * N * Nt) for i = 1 : dim, j = 1 : dim]
-    
+    Is = [Vector{Ti}(undef, N * N * Nt) for i = 1 : dim, j = 1 : dim]
+    Js = [Vector{Ti}(undef, N * N * Nt) for i = 1 : dim, j = 1 : dim]
+    Vs = [Vector{Tv}(undef, N * N * Nt) for i = 1 : dim, j = 1 : dim]
+
     # The local system matrix
     A_locals = [zeros(N, N) for i = 1 : dim, j = 1 : dim]
 
@@ -107,7 +107,7 @@ function mass_matrix(mesh::Mesh{dim,N,Tv,Ti}) where {dim,N,Tv,Ti}
     weights = get_weights(quadrature)
     element_values = ElementValues(cell, quadrature, update_det_J)
     total = N * N * nelements(mesh)
-    is, js, vs = Vector{Ti}(total), Vector{Ti}(total), Vector{Tv}(total)
+    is, js, vs = Vector{Ti}(undef, total), Vector{Ti}(undef, total), Vector{Tv}(undef, total)
     A_local = zeros(N, N)
 
     idx = 1

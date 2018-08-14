@@ -9,9 +9,9 @@ function interpolation_operator(mesh::Mesh{dim,N,Tv,Ti}, graph::SparseGraph{Ti} 
     Nn = length(mesh.nodes)
     Ne = length(graph.adj)
 
-    nzval = Vector{Tv}(Nn + 2Ne)
-    colptr = Vector{Int}(Nn + Ne + 1)
-    rowval = Vector{Int}(Nn + 2Ne)
+    nzval = Vector{Tv}(undef, Nn + 2Ne)
+    colptr = Vector{Int}(undef, Nn + Ne + 1)
+    rowval = Vector{Int}(undef, Nn + 2Ne)
 
     # Nonzero values
     @inbounds for i = 1 : Nn
@@ -46,7 +46,7 @@ function interpolation_operator(mesh::Mesh{dim,N,Tv,Ti}, graph::SparseGraph{Ti} 
     end
 
     # Note the transpose
-    return SparseMatrixCSC(Nn, Nn + Ne, colptr, rowval, nzval)'
+    return SparseMatrixCSC(SparseMatrixCSC(Nn, Nn + Ne, colptr, rowval, nzval)')
 end
 
 function interpolate_and_sum_to!(y::AbstractMatrix, P, x::AbstractMatrix)
@@ -57,7 +57,7 @@ end
 
 function _interpolate_and_sum_to(y::AbstractMatrix, P, x::AbstractMatrix, id::Int)
     @inbounds for col = id : nthreads() : size(x, 2)
-        A_mul_B!(1, P, view(x, :, col), 1, view(y, :, col))
+        mul!(view(y, :, col), P, view(x, :, col), 1, 1)
     end
 end
 
@@ -69,6 +69,6 @@ end
 
 function _restrict_to(y::AbstractMatrix, P, x::AbstractMatrix, id::Int)
     @inbounds for col = id : nthreads() : size(x, 2)
-        At_mul_B!(view(y, :, col), P, view(x, :, col))
+        mul!(view(y, :, col), P', view(x, :, col))
     end
 end

@@ -24,7 +24,7 @@ end
 
     a, d = min(a, d), max(a, d)
     b, c = min(b, c), max(b, c)
-    
+
     a, b, c, d
 end
 
@@ -41,7 +41,7 @@ end
 """
 Sort a vector by its tuple value using counting sort.
 """
-function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getindex, count = Vector{Int}(max + 1)) where {Tf}
+function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getindex, count = Vector{Int}(undef, max + 1)) where {Tf}
     n = length(v)
     aux = similar(v)
 
@@ -50,7 +50,7 @@ function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getind
         for i = 1 : max + 1
             count[i] = 0
         end
-        
+
         # Frequency count
         for i = 1 : n
             count[value(v[i], d) + 1] += 1
@@ -67,13 +67,13 @@ function radix_sort!(v::AbstractVector, max::Int, radix::Int, value::Tf = getind
         end
 
         # Copy
-        copy!(v, aux)
+        copyto!(v, aux)
     end
 
     v
 end
 
-radix_sort!(v::Vector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer} = radix_sort!(v, max, N)
+radix_sort!(v::AbstractVector{NTuple{N,Ti}}, max::Int) where {N,Ti<:Integer} = radix_sort!(v, max, N)
 
 
 """
@@ -106,7 +106,7 @@ function sort_edges!(g::SparseGraph)
     return g
 end
 
-function remove_duplicates!(vec::Vector)
+function remove_duplicates!(vec::AbstractVector)
     n = length(vec)
 
     # Can only be unique
@@ -127,7 +127,7 @@ end
 """
 Remove non-repeated elements from an array
 """
-function remove_singletons!(v::Vector)
+function remove_singletons!(v::AbstractVector)
     count = 0
     slow = 1
     fast = 1
@@ -157,7 +157,7 @@ end
 Given a sorted array lhs and a sorted array rhs, remove all items in rhs from
 lhs, modifying lhs in-place.
 """
-function left_minus_right!(lhs::Vector, rhs::Vector)
+function left_minus_right!(lhs::AbstractVector, rhs::AbstractVector)
     slow = 1
     fast = 1
     idx = 1
@@ -191,11 +191,11 @@ end
 """
     complement(sorted_vec, n)
 
-Returns a sorted vector of the numbers 1:n \ sorted_vec. Useful to identify
+Returns a sorted vector of the numbers 1:n \\ sorted_vec. Useful to identify
 the interior nodes if the boundary nodes are known.
 """
-function complement(nodes::Vector{Ti}, n::Integer) where {Ti}
-    complement = Vector{Ti}(n - length(nodes))
+function complement(nodes::AbstractVector{Ti}, n::Integer) where {Ti}
+    complement = Vector{Ti}(undef, n - length(nodes))
     num = 1
     idx = 1
 
@@ -219,7 +219,7 @@ end
 """
 Remove all repeated pairs of values in a vector
 """
-function remove_repeated_pairs!(v::Vector)
+function remove_repeated_pairs!(v::AbstractVector)
     n = length(v)
 
     # Can only be unique

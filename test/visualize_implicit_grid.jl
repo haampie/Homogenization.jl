@@ -1,7 +1,7 @@
-using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map, 
+using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map,
                refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
                nodes_on_ref_edges, interfaces, face_to_elements, edge_to_elements,
-               nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior, 
+               nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior,
                get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
                construct_full_grid, ZeroDirichletConstraint, list_boundary_nodes_edges_faces,
                refined_mesh, apply_constraint!
@@ -27,9 +27,9 @@ function see_whether_faces_edges_nodes_connect_at_interfaces(refinements = 3, ga
         ref = refined_element(refinements, Tets64)
 
         finest_mesh = ref.levels[end]
-        
-        fine_nodes = Vector{SVector{3,Float64}}(nelements(base) * nnodes(finest_mesh))
-        fine_elements = Vector{NTuple{4,Int}}(nelements(base) * nelements(finest_mesh))
+
+        fine_nodes = Vector{SVector{3,Float64}}(undef, nelements(base) * nnodes(finest_mesh))
+        fine_elements = Vector{NTuple{4,Int}}(undef, nelements(base) * nelements(finest_mesh))
 
         new_nodes_idx = 0
         new_elements_idx = 0
@@ -71,7 +71,7 @@ function see_whether_faces_edges_nodes_connect_at_interfaces(refinements = 3, ga
         # Get mappings from node, edge, face of base mesh to element and local ids.
         face_to_element = face_to_elements(base)
         edge_to_element = edge_to_elements(base)
-        node_to_element = node_to_elements(base)
+        _, node_to_element = node_to_elements(base)
 
         u_faces = zeros(nnodes(finest_mesh), nelements(base))
         u_edges = zeros(nnodes(finest_mesh), nelements(base))
@@ -148,7 +148,7 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
         (0,1,1),
         (1,1,1)
     ]
-    
+
     # Split in tetrahedra
     elements = [
         (1,2,3,5),
@@ -164,7 +164,7 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
     nodes, edges, faces = list_boundary_nodes_edges_faces(base)
 
     constraint = ZeroDirichletConstraint(nodes, edges, faces)
-    
+
     # Implicitly refine things.
     implicit = ImplicitFineGrid(base, total_levels)
 
@@ -175,7 +175,7 @@ function extract_full_fine_grid(total_levels = 6, store_level = 3)
     nodes_per_element = nnodes(refined_mesh(implicit, store_level))
 
     # Fill each element with a unique value
-    u = Matrix{Float64}(nodes_per_element, nelements(base))
+    u = Matrix{Float64}(undef, nodes_per_element, nelements(base))
 
     for el = 1 : nelements(base)
         u[:, el] .= float(el)

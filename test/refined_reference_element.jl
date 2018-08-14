@@ -1,5 +1,5 @@
 using Rewrite: refined_element, reference_element, nodes_on_ref_faces, nodes_on_ref_edges, Tets64
-using Base.Test
+using Test
 
 @testset "Refined tet" begin
     N = 8

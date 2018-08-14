@@ -2,6 +2,7 @@ using SparseArrays, Random, LinearAlgebra
 
 import Base: iterate
 
+# Standard implementation
 struct CGIterable{Tm, Ts, Tv, numT <: Real}
     A::Tm
     x::Ts
@@ -41,6 +42,7 @@ function iterate(cg::CGIterable, iteration = 1)
     cg.residual[], iteration + 1
 end
 
+# Multishift implementation.
 function multishift_cg(n = 1000)
     A = spdiagm(
         -1 => fill(-1.0, n-1),
@@ -48,7 +50,7 @@ function multishift_cg(n = 1000)
          1 => fill(-1.0, n-1)
     )
     
-    x_exact = ones(n)
+    x_exact = randn
     b = A * x_exact
 
     x = zero(b)
@@ -65,21 +67,37 @@ function multishift_cg(n = 1000)
     end
 end
 
+"""
+    simple_lanczos(A, b, m = 10)
+
+Solve the problems
+
+(A + σ₁I)x₁ = b
+(A + σ₂I)x₂ = b
+      ⋮
+(A + σₙI)xₙ = b
+
+simultaneously for Hermitian, positive definite A, using the same Krylov
+subspace. Assuming σ₁ > … > σₙ, the basic way to look at this is we solve
+the problem (A + σₙI)xₙ = b and as a by-product we solve for x₁, …, xₙ₋₁ as
+well, reusing the same Krylov subspace.
+"""
 function simple_lanczos(A, b, m = 10)
     n = size(A, 1)
     V = zeros(n, m + 1)
-    W = similar(V)
+    W₁ = similar(V)
+    W₂ = similar(V)
+    W₃ = similar(V)
     v₁ = view(V, :, 1)
     copyto!(v₁, b)
     β = norm(b)
     v₁ ./= norm(b)
 
     T = zeros(m + 1, m)
-    ds = zeros(m)
-    y = zeros(m)
-    y[1] = β
-
-    x = zero(b)
+    ds = zeros(m, 3)
+    y = zeros(m, 3)
+    y[1,1] = y[1,2] = y[1,3] = β
+    x = zeros(n, 3)
 
     for k = 1 : m
         vₖ = view(V, :, k)
@@ -101,29 +119,35 @@ function simple_lanczos(A, b, m = 10)
         T[k+1,k] = norm(vₖ₊₁)
         vₖ₊₁ .*= 1 / T[k+1,k]
 
-        # Update the Cholesky decomp
+        # Update the Cholesky decomp and apply it right to V and left to the rhs
         if k == 1
-            ds[k] = T[k,k]
+            ds[k,1] = T[k,k] + 1.00
+            ds[k,2] = T[k,k] + 0.50
+            ds[k,3] = T[k,k] + 0.25
+            y[k,1] /= √(ds[k,1])
+            y[k,2] /= √(ds[k,2])
+            y[k,3] /= √(ds[k,3])
+            W₁[:,k] .= view(V, :, k) ./ √(ds[k,1])
+            W₂[:,k] .= view(V, :, k) ./ √(ds[k,2])
+            W₃[:,k] .= view(V, :, k) ./ √(ds[k,3])
         else
-            ds[k] = T[k,k] - T[k,k-1]^2 / ds[k-1]
+            ds[k,1] = T[k,k] + 1.00 - T[k,k-1]^2 / ds[k-1,1]
+            ds[k,2] = T[k,k] + 0.50 - T[k,k-1]^2 / ds[k-1,2]
+            ds[k,3] = T[k,k] + 0.25 - T[k,k-1]^2 / ds[k-1,3]
+            y[k,1] = -T[k-1,k] / √(ds[k,1] * ds[k-1,1]) * y[k-1,1]
+            y[k,2] = -T[k-1,k] / √(ds[k,2] * ds[k-1,2]) * y[k-1,2]
+            y[k,3] = -T[k-1,k] / √(ds[k,3] * ds[k-1,3]) * y[k-1,3]
+            W₁[:, k] .= (view(V, :, k) .- view(W₁, :, k-1) .* (T[k-1,k] / √(ds[k-1,1]))) ./ √(ds[k,1])
+            W₂[:, k] .= (view(V, :, k) .- view(W₂, :, k-1) .* (T[k-1,k] / √(ds[k-1,2]))) ./ √(ds[k,2])
+            W₃[:, k] .= (view(V, :, k) .- view(W₃, :, k-1) .* (T[k-1,k] / √(ds[k-1,3]))) ./ √(ds[k,3])
         end
 
-        # Update solution thingy
-        if k == 1
-            y[k] = y[k] / √(ds[k])
-        else
-            y[k] = -T[k-1,k] / √(ds[k]*ds[k-1]) * y[k-1]
-        end
-
-        # Update the W = V * inv(L') term.
-        if k == 1
-            W[:, k] = view(V, :, k) ./ √(ds[k])
-        else
-            W[:, k] .= (view(V, :, k) .- view(W, :, k - 1) .* (T[k-1,k] / √(ds[k-1]))) ./ √(ds[k])
-        end
-
-        x .+= view(W, :, k) .* y[k]
-        @show norm(A * x - b)
+        x[:, 1] .+= view(W₁, :, k) .* y[k, 1]
+        x[:, 2] .+= view(W₂, :, k) .* y[k, 2]
+        x[:, 3] .+= view(W₃, :, k) .* y[k, 3]
+        @show norm(A * x[:,1] .+ 1.00 .* x[:,1] .- b)
+        @show norm(A * x[:,2] .+ 0.50 .* x[:,2] .- b)
+        @show norm(A * x[:,3] .+ 0.25 .* x[:,3] .- b)
     end
 
     return V, T
@@ -138,11 +162,66 @@ function simple_lanczos_example(n = 100)
     x_exact = rand(n)
     b = A * x_exact
 
-    it1 = CGIterable(A, b)
+    it1 = CGIterable(A + 1.000I, b)
+    it2 = CGIterable(A + 0.500I, b)
+    it3 = CGIterable(A + 0.250I, b)
 
-    for (a, _) = zip(1:10, it1)
-        println(it1.residual[])
+    for (i, _, _) = zip(1 : 20, it1, it2, it3)
+        @show it1.residual[] it2.residual[] it3.residual[]
+        println()
     end
 
-    A, simple_lanczos(A, b, 10)...
+    A, simple_lanczos(A, b, 20)...
+end
+
+function very_simple_multishift_cg_example(n = 100)
+    A = spdiagm(
+        -1 => fill(-1.0, n-1),
+         0 => fill(2.1, n), 
+         1 => fill(-1.0, n-1)
+    )
+    x_exact = rand(n)
+    b = A * x_exact
+
+    it1 = CGIterable(A, b)
+    it2 = CGIterable(A + 0.500I, b)
+    # it3 = CGIterable(A + 0.250I, b)
+
+    for (i, _, _) = zip(1 : 20, it1, it2)
+        @show it1.residual[] it2.residual[]
+        println()
+    end
+
+    very_simple_multishift_cg(A, b, 1.0, 20)
+end
+
+function very_simple_multishift_cg(A, b, λ, m)
+    n = size(A, 1)
+    x₁ = zeros(n)
+    x₂ = zeros(n)
+
+    p = copy(b)
+    r₁ = copy(b)
+    r₂ = copy(b)
+    c = similar(b)
+    rnrm_prev² = dot(r₁, r₁)
+    rnrm_curr² = 1.0
+
+    for i = 1 : m
+        mul!(c, A, p)
+        dot_p_c = dot(p, c)
+        α₁ = rnrm_prev² / dot_p_c
+        α₂ = dot(r₁, r₂) / (dot_p_c + λ * dot(p, p))
+        @show α₂
+        x₁ .+= α₁ .* p
+        x₂ .+= α₂ .* p
+        r₁ .-= α₁ .* c
+        r₂ .= r₂ .- α₂ .* c .- (α₂ * λ) .* p
+        rnrm_curr² = dot(r₁, r₁)
+        @show √rnrm_curr²
+        @show norm(A * x₁ + λ * x₁ - b)
+        β = rnrm_curr² / rnrm_prev²
+        rnrm_prev² = rnrm_curr²
+        p .= r₁ .+ β .* p
+    end
 end

@@ -1,5 +1,5 @@
 using Rewrite: list_boundary_nodes_edges_faces, Mesh, refine_uniformly, list_interior_nodes
-using Base.Test
+using Test
 using StaticArrays
 
 @testset "Listing boundary faces" begin

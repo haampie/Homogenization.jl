@@ -2,18 +2,18 @@ using Base: @propagate_inbounds
 
 function reference_element(::Type{Tris{Tv,Ti}}) where {Tv,Ti}
     nodes = SVector{2,Tv}[(0,0),(1,0),(0,1)]
-    elements = [(Base.OneTo(Ti(3))...)]
+    elements = [ntuple(i -> Ti(i), 3)]
     Mesh(nodes, elements)
 end
 
 function reference_element(::Type{Tets{Tv,Ti}}) where {Tv,Ti}
     nodes = SVector{3,Tv}[(0,0,0),(1,0,0),(0,1,0),(0,0,1)]
-    elements = [(Base.OneTo(Ti(4))...)]
+    elements = [ntuple(i -> Ti(i), 4)]
     Mesh(nodes, elements)
 end
 
 """
-ReferenceNumbering keeps track of the local numbering of the faces, edges 
+ReferenceNumbering keeps track of the local numbering of the faces, edges
 and nodes of a refined reference element.
 """
 struct ReferenceNumbering{Ti}
@@ -39,9 +39,9 @@ end
 Return a multilevel structure of refined grids with interpolation operators.
 """
 function refined_element(n::Int, m::Type{Mesh{dim,N,Tv,Ti}}) where {dim,N,Tv,Ti}
-    levels = Vector{m}(n)
-    interops = Vector{SparseMatrixCSC{Tv,Ti}}(n - 1)
-    numbering = Vector{ReferenceNumbering{Ti}}(n)
+    levels = Vector{m}(undef, n)
+    interops = Vector{SparseMatrixCSC{Tv,Ti}}(undef, n - 1)
+    numbering = Vector{ReferenceNumbering{Ti}}(undef, n)
     levels[1] = reference_element(m)
     numbering[1] = get_local_numbering(levels[1])
 
@@ -62,18 +62,18 @@ end
 
 function nodes_on_ref_faces(m::Tets{Tv}) where {Tv}
     return [
-        find(x -> x[3] == 0, m.nodes),
-        find(x -> x[2] == 0, m.nodes),
-        find(x -> x[1] == 0, m.nodes),
-        find(x -> x[1] + x[2] + x[3] ≥ 1 - 10 * eps(Tv), m.nodes) # rounding errors!
+        findall(x -> x[3] == 0, m.nodes),
+        findall(x -> x[2] == 0, m.nodes),
+        findall(x -> x[1] == 0, m.nodes),
+        findall(x -> x[1] + x[2] + x[3] ≥ 1 - 10 * eps(Tv), m.nodes) # rounding errors!
     ]
 end
 
 function nodes_on_ref_edges(m::Tris{Tv}) where {Tv}
     return [
-        find(x -> x[2] == 0, m.nodes),
-        find(x -> x[1] == 0, m.nodes),
-        find(x -> x[1] + x[2] ≥ 1 - 10 * eps(Tv), m.nodes) # rounding errors!
+        findall(x -> x[2] == 0, m.nodes),
+        findall(x -> x[1] == 0, m.nodes),
+        findall(x -> x[1] + x[2] ≥ 1 - 10 * eps(Tv), m.nodes) # rounding errors!
     ]
 end
 
@@ -104,12 +104,12 @@ function nodes_on_ref_edges(m::Tets{Tv,Ti}) where {Tv,Ti}
     ref_nodes = get_reference_nodes(Tet{Tv})
 
     @inbounds nodes_per_edge = [
-        find(IsOnEdge(ref_nodes[1], ref_nodes[2]), m.nodes),
-        find(IsOnEdge(ref_nodes[1], ref_nodes[3]), m.nodes),
-        find(IsOnEdge(ref_nodes[1], ref_nodes[4]), m.nodes),
-        find(IsOnEdge(ref_nodes[2], ref_nodes[3]), m.nodes),
-        find(IsOnEdge(ref_nodes[2], ref_nodes[4]), m.nodes),
-        find(IsOnEdge(ref_nodes[3], ref_nodes[4]), m.nodes)
+        findall(IsOnEdge(ref_nodes[1], ref_nodes[2]), m.nodes),
+        findall(IsOnEdge(ref_nodes[1], ref_nodes[3]), m.nodes),
+        findall(IsOnEdge(ref_nodes[1], ref_nodes[4]), m.nodes),
+        findall(IsOnEdge(ref_nodes[2], ref_nodes[3]), m.nodes),
+        findall(IsOnEdge(ref_nodes[2], ref_nodes[4]), m.nodes),
+        findall(IsOnEdge(ref_nodes[3], ref_nodes[4]), m.nodes)
     ]
 
     nodes_per_edge
@@ -118,7 +118,7 @@ end
 """
     get_local_numbering(mesh::Tets) -> ReferenceNumbering
 
-Get the indices of the nodes in (the interior of) the faces, the edges and the 
+Get the indices of the nodes in (the interior of) the faces, the edges and the
 corner points. There's probably a cheaper way to do it by keeping track of
 them during consecutive refinements, but well...
 """

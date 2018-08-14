@@ -6,8 +6,8 @@ function hypercube(::Type{<:Tet{Tv}}, n::Int, Ti::Type{<:Integer} = Int) where {
     Ne = 6 * n * n * n
     nn = reshape(1 : Nn, n + 1, n + 1, n + 1)
 
-    nodes = Vector{SVector{3,Tv}}(Nn)
-    elements = Vector{NTuple{4,Ti}}(Ne)
+    nodes = Vector{SVector{3,Tv}}(undef, Nn)
+    elements = Vector{NTuple{4,Ti}}(undef, Ne)
 
     # Construct the nodes
     node_idx = 0

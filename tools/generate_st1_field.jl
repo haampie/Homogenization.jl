@@ -1,7 +1,7 @@
 using Base: OneTo
 using AbstractFFTs: ScaledPlan, normalization
 using FFTW
-using Base.LinAlg
+using LinearAlgebra
 using Base: tail
 using WriteVTK
 using Base.Threads: @threads, nthreads
@@ -109,7 +109,7 @@ function generate_field(ns::NTuple{dim,Int}, T = Float64, threads = 2, α = T(10
         vtk_cell_data(grid, A_real, "Permeability")
         vtk_save(grid)
     end
-    
+
     return A_real
 end
 
@@ -123,13 +123,13 @@ function st1_example(n::Int = 128, elt::Type{<:ElementType} = Tri{Float64}, thre
     b = assemble_vector(mesh, identity)
     x = zeros(b)
     x[interior] .= A[interior,interior] \ b[interior]
-    
+
     vtk_grid("st1_example", mesh) do vtk
         vtk_point_data(vtk, x, "x")
     end
 end
 
-# Linear interpolation of σ in the mean 
+# Linear interpolation of σ in the mean
 @propagate_inbounds function σ_in_element(mesh::Mesh{2}, el::NTuple{M}, σ::AbstractArray{Tv,2}) where {Tv,M}
     mid = mean(get_nodes(mesh, el))
     P = unsafe_trunc.(Int, mid)
@@ -139,7 +139,7 @@ end
 
     σ[P[1], P[2]] * diff[1] + σ[P[1] + 1, P[2]] * (1 - diff[1])
     σ[P[1], P[2]] * diff[2] + σ[P[1], P[2] + 1] * (1 - diff[2])
-     
+
     σ[CartesianIndex(unsafe_trunc.(Int, mean(get_nodes(mesh, el))).data)]
 end
 
@@ -152,7 +152,7 @@ function assemble_st1(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{Tv}, λ::Tv = 1.0) wh
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
     element_values = ElementValues(cell, quadrature, update_gradients | update_det_J)
-    
+
     total = N * N * nelements(mesh)
     is, js, vs = Vector{Ti}(total), Vector{Ti}(total), Vector{Tv}(total)
     A_local = zeros(N, N)
@@ -195,7 +195,7 @@ function assemble_st1(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{Tv}, λ::Tv = 1.0) wh
 end
 
 """
-Take a square / cube of conductivity values + a mesh, return a 
+Take a square / cube of conductivity values + a mesh, return a
 """
 function conductivity_per_cell(mesh::Mesh{dim,N,Tv,Ti}, σ_grid::AbstractArray{Tv,dim}) where {dim,N,Tv,Ti}
     σs = Vector{Tv}(nelements(mesh))
