@@ -43,133 +43,22 @@ function iterate(cg::CGIterable, iteration = 1)
 end
 
 function simple_lanczos_example(n = 100, m = 20)
-    A = spdiagm(
-        -1 => fill(-1.0, n-1),
-         0 => fill(2.0, n),
-         1 => fill(-1.0, n-1)
-    )
+    A = spdiagm(-1 => fill(-1.0, n-1), 0 => fill(2.0, n), 1 => fill(-1.0, n-1))
     x_exact = rand(n)
     b = A * x_exact
 
     it1 = CGIterable(A + 1.000I, b)
-    it2 = CGIterable(A + 0.500I, b)
-    it3 = CGIterable(A + 0.250I, b)
 
-    @time for (i, _, _) = zip(1 : m, it1, it2, it3)
+    @time for (i, j) in zip(1:m, it1)
 
     end
 
-    @time lanczos_based_multishift_cg_efficient(A, b, m)
+    @time multishift_cg(A, b, m)
 
     return nothing
 end
 
-###
-
-
-"""
-    lanczos_based_multishift_cg(A, b, m = 10)
-
-Solve the problems
-
-(A + λ₁I)x₁ = b
-(A + λ₂I)x₂ = b
-(A + λ₃I)x₃ = b
-
-simultaneously for Hermitian, positive definite A, using the same Krylov
-subspace. Assuming σ₁ > … > σₙ, the basic way to look at this is we solve
-the problem (A + σₙI)xₙ = b and as a by-product we solve for x₁, …, xₙ₋₁ as
-well, reusing the same Krylov subspace.
-"""
-function lanczos_based_multishift_cg(A, b, m)
-    n = size(A, 1)
-
-    # Holds the orthonormal basis of the Krylov subspace in standard inner product
-    V = zeros(n, m + 1)
-
-    # Orthonormal basis for Krylov subspace in inner product induced by A
-    W₁, W₂, W₃ = similar(V), similar(V), similar(V)
-    λ₁, λ₂, λ₃ = (1.00, 0.50, 0.25)
-
-    # Initial basis vector for Krylov subspace
-    v₁ = view(V, :, 1)
-    copyto!(v₁, b)
-    β = norm(b)
-    v₁ ./= norm(b)
-
-    # Tridiagonal matrix ~ Hessenberg matrix
-    T = zeros(m + 1, m)
-
-    # Root-free Cholesky of T for multiple shifts
-    # T + σI = LΔ⁻¹L' with Δᵢᵢ = Tᵢᵢ - Tᵢ,ᵢ₋₁² / Δᵢ₋₁,ᵢ₋₁
-    # Lᵢᵢ = Δᵢᵢ, Lᵢ₋₁,ᵢ = Tᵢ₋₁,ᵢ.
-    Δ = zeros(m, 3)
-    y = zeros(m, 3)
-    y[1,1] = y[1,2] = y[1,3] = β
-    x = zeros(n, 3)
-
-    for k = 1 : m
-        # Construct the next basis vector of the Krylov subspace
-        vₖ = view(V, :, k)
-        vₖ₊₁ = view(V, :, k + 1)
-        mul!(vₖ₊₁, A, vₖ)
-
-        # Modified Gram-schmidt: vₖ₊₁ ← (I - VV')vₖ₊₁
-        # T[1:k,k] ← V'vₖ₊₁
-        # vₖ₊₁ ← vₖ₊₁ / ‖vₖ₊₁‖₂
-
-        T[k,k] = dot(vₖ, vₖ₊₁)
-
-        if k == 1
-            vₖ₊₁ .= vₖ₊₁ .- T[k,k] .* vₖ
-        else
-            # Exploit symmetry
-            T[k-1,k] = T[k,k-1]
-            vₖ₊₁ .= vₖ₊₁ .- T[k,k] .* vₖ .- T[k,k-1] .* V[:, k-1]
-        end
-
-        # Normalize
-        T[k+1,k] = norm(vₖ₊₁)
-        vₖ₊₁ .*= 1 / T[k+1,k]
-
-        # Update the Cholesky decomp and apply it right to V and left to the rhs
-        if k == 1
-            Δ[k,1] = T[k,k] + λ₁
-            Δ[k,2] = T[k,k] + λ₂
-            Δ[k,3] = T[k,k] + λ₃
-            y[k,1] /= Δ[k,1]
-            y[k,2] /= Δ[k,2]
-            y[k,3] /= Δ[k,3]
-            W₁[:,k] .= V[:, k]
-            W₂[:,k] .= V[:, k]
-            W₃[:,k] .= V[:, k]
-        else
-            Δ[k,1] = T[k,k] + λ₁ - T[k,k-1]^2 / Δ[k-1,1]
-            Δ[k,2] = T[k,k] + λ₂ - T[k,k-1]^2 / Δ[k-1,2]
-            Δ[k,3] = T[k,k] + λ₃ - T[k,k-1]^2 / Δ[k-1,3]
-            y[k,1] = -T[k-1,k] / Δ[k,1] * y[k-1,1]
-            y[k,2] = -T[k-1,k] / Δ[k,2] * y[k-1,2]
-            y[k,3] = -T[k-1,k] / Δ[k,3] * y[k-1,3]
-            W₁[:, k] .= V[:, k] .- W₁[:, k-1] .* (T[k-1,k] / Δ[k-1,1])
-            W₂[:, k] .= V[:, k] .- W₂[:, k-1] .* (T[k-1,k] / Δ[k-1,2])
-            W₃[:, k] .= V[:, k] .- W₃[:, k-1] .* (T[k-1,k] / Δ[k-1,3])
-        end
-
-        r₁ = abs(T[k+1,k] * y[k,1])
-        r₂ = abs(T[k+1,k] * y[k,2])
-        r₃ = abs(T[k+1,k] * y[k,3])
-
-        x[:, 1] .+= W₁[:, k] .* y[k, 1]
-        x[:, 2] .+= W₂[:, k] .* y[k, 2]
-        x[:, 3] .+= W₃[:, k] .* y[k, 3]
-        @show r₁ r₂ r₃
-    end
-
-    return x[:,1], x[:,2], x[:,3]
-end
-
-
-function lanczos_based_multishift_cg_efficient(A, b, m)
+function multishift_cg(A, b, m)
     n = size(A, 1)
 
     # Solution vecs
@@ -265,8 +154,6 @@ function lanczos_based_multishift_cg_efficient(A, b, m)
         x₁ .+= w₁ .* y₁
         x₂ .+= w₂ .* y₂
         x₃ .+= w₃ .* y₃
-
-        # @show r₁ r₂ r₃
     end
 
     return x₁, x₂, x₃

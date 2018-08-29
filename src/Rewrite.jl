@@ -1,5 +1,7 @@
 module Rewrite
 
+export hypercube, Tets, Tet, Tris, Tri, refine_uniformly, Mesh
+
 using StaticArrays, WriteVTK
 using SparseArrays, LinearAlgebra, Random, SuiteSparse
 
@@ -31,5 +33,6 @@ include("apply_local_operators.jl")
 include("examples/checkercube.jl")
 include("../tools/generate_st1_field.jl")
 include("fast_mv_product.jl")
+include("examples/large_matrix_free_mg.jl")
 
 end

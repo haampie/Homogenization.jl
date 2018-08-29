@@ -1,7 +1,10 @@
 """
-Create a square of size n x n where each cell is split into two triangles
+    hypercube(Tri{Float64}, n; scale = 1) -> Mesh
+
+Create a square of size scale * (n x n) where each cell is split into two 
+triangles.
 """
-function hypercube(::Type{<:Tri{Tv}}, n::Int, Ti::Type{<:Integer} = Int) where {Tv}
+function hypercube(::Type{<:Tri{Tv}}, n::Int, Ti::Type{<:Integer} = Int; scale = 1, origin = (1, 1)) where {Tv}
     Nn = (n + 1) * (n + 1)
     Ne = 2 * n * n
     nn = reshape(1 : Nn, n + 1, n + 1)
@@ -12,7 +15,7 @@ function hypercube(::Type{<:Tri{Tv}}, n::Int, Ti::Type{<:Integer} = Int) where {
     # Construct the nodes
     node_idx = 0
     @inbounds for x = 1 : n + 1, y = 1 : n + 1
-        nodes[node_idx += 1] = (Tv(x), Tv(y))
+        nodes[node_idx += 1] = (scale * (x - 1) + origin[1], scale * (y - 1) + origin[2])
     end
 
     # Construct the elements
