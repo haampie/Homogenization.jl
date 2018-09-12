@@ -196,15 +196,16 @@ end
 """
 Solve the problem ∇⋅a∇u = 1 in Ω, u = 0 on ∂Ω with a few multigrid steps.
 """
-function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements = 2, max_cycles = 5)
+function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements = 2, max_cycles = 5, save = 2)
     base = hypercube(elementtype, n)
 
     # Generate conductivity
-    srand(1)
+    Random.seed!(1)
     σ = generate_conductivity(base, n)
     σ_per_el = conductivity_per_element(base, σ)
 
     ### Coarse grid.
+    sort_element_nodes!(base.elements)
     interior = list_interior_nodes(base)
     F = cholesky(assemble_checkercube(base, σ_per_el, 0.0)[interior,interior])
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
@@ -238,25 +239,25 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
     apply_constraint!(finest_level.x, refinements, constraint, implicit)
     local_rhs!(finest_level.b, implicit)
 
-    ωs = [.028,.028,.028,.028,.028,.028,.028,.028]
+    ωs = [.28,.060,.060,.060,.060,.060,.060,.028]
     rs = Float64[]
 
     # Solve the next problem
     for i = 1 : max_cycles
         println("Cycle ", i)
-        vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, 1)
+        vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, 3)
 
         # Compute increment in σ and residual norm
         zero_out_all_but_one!(finest_level.r, implicit, refinements)
         push!(rs, norm(finest_level.r))
-        # @show last(rs)
+        @show last(rs)
     end
 
-    full_mesh = construct_full_grid(implicit, 1)
+    full_mesh = construct_full_grid(implicit, save)
 
     vtk_grid("checkercube_full_$refinements", full_mesh) do vtk
-        vtk_point_data(vtk, finest_level.x[1 : nnodes(refined_mesh(implicit, 1)), :][:], "x")
-        vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(full_mesh), :), "σ")
+        vtk_point_data(vtk, finest_level.x[1 : nnodes(refined_mesh(implicit, save)), :][:], "x")
+        # vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(full_mesh), :), "σ")
     end
 
     rs
@@ -264,6 +265,7 @@ end
 
 function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, tol = 1e-4, max_cycles::Int = 20, k_max = 5, smoothing_steps::Int = 2)
     base = hypercube(elementtype, n)
+    sort_element_nodes!(base.elements)
     ξ = @SVector ones(dimension(base))
     ξ /= norm(ξ)
 
