@@ -160,38 +160,6 @@ function conductivity_per_element(mesh::Mesh{dim}, σ::Conductivity{Tv,dim}) whe
     σ_el
 end
 
-function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements = 2, λ = 1.0)
-    mesh = refine_uniformly(hypercube(elementtype, n), times = refinements)
-    sort_element_nodes!(mesh.elements)
-    @show nnodes(mesh)
-
-    # Conductivity per [0, 1]^d bit
-    σ = generate_conductivity(mesh, n)
-
-    # Simple lookup to get the conductivity per mesh element
-    σ_per_el = conductivity_per_element(mesh, σ)
-    interior = list_interior_nodes(mesh)
-
-    A_full = assemble_checkercube(mesh, σ_per_el, λ)
-    Ā_full = assemble_matrix(mesh, (∇u, ∇v) -> 3.79 * dot(∇u, ∇v))
-    b_full = assemble_vector(mesh, identity)
-    A = A_full[interior, interior]
-    Ā = Ā_full[interior, interior]
-    b = b_full[interior]
-    x = zeros(nnodes(mesh))
-    x̄ = zeros(nnodes(mesh))
-    x[interior] .= A \ b
-    x̄[interior] .= Ā \ b
-
-    vtk_grid("checkercube_full", mesh) do vtk
-        vtk_point_data(vtk, x, "x")
-        vtk_point_data(vtk, x̄, "x_bar")
-        vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(mesh), :), "σ")
-    end
-
-    nothing
-end
-
 
 """
 Solve the problem ∇⋅a∇u = 1 in Ω, u = 0 on ∂Ω with a few multigrid steps.
@@ -200,7 +168,7 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
     base = hypercube(elementtype, n)
 
     # Generate conductivity
-    srand(1)
+    Random.seed!(1)
     σ = generate_conductivity(base, n)
     σ_per_el = conductivity_per_element(base, σ)
 
@@ -262,13 +230,71 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
     rs
 end
 
-function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, tol = 1e-4, max_cycles::Int = 20, k_max = 5, smoothing_steps::Int = 2)
+"""
+    ahom_for_checkercube(n, type, refinements, tol, max_cycles, kmax, smoothingsteps) → σ_sum, σs, rs
+
+Construct a hypercube [1,n]ᵈ on which a checkerboard pattern is constructed with
+unit size length per cell. This makes the base mesh that is being refined 
+`refinements` times (the coarse grid operator is factorized!). The `tol`
+parameter is the absolute tolerance on the homogenized coefficient. In total we
+do kmax steps of JC's algorithm, where we solve the big-L2-term problem with
+multigrid until the tolerance of the homogenized coefficient is met.
+
+Boundary layer is FIXED to be 10 cells on every side!
+
+Returns the σ param from the theorem and some convergence history (intermediate
+σs and residuals of the multigrid step).
+
+The homogenized coefficients ā = 5 - σ.
+
+Example 2D:
+```
+# Effective size = 64x64 with boundary layer 84x84.
+
+# With just one refinement we get terrible results!
+Random.seed!(1)
+σ, = ahom_for_checkercube(64 + 2 * 10, Rewrite.Tri{Float64}, 1, 1e-4, 60, 5, 2)
+@show σ
+σ = 1.6163911040833774
+
+# With two refinements
+Random.seed!(1)
+σ, = ahom_for_checkercube(64 + 2 * 10, Rewrite.Tri{Float64}, 2, 1e-4, 60, 5, 2)
+@show σ
+σ = 1.8172724552722872
+
+# With three refinements
+Random.seed!(1)
+ahom, = ahom_for_checkercube(64 + 2 * 10, Rewrite.Tri{Float64}, 3, 1e-4, 60, 5, 2)
+@show ahom
+ahom = 1.9068559447779048
+```
+
+Example 3D:
+```
+Random.seed!(1);
+ahom, = Rewrite.ahom_for_checkercube(20 + 2 * 10, Rewrite.Tet{Float64}, 1, 1e-4, 60, 5, 2)
+@show ahom
+0.7811689150982423
+
+Random.seed!(1);
+ahom, = Rewrite.ahom_for_checkercube(20 + 2 * 10, Rewrite.Tet{Float64}, 2, 1e-4, 60, 5, 2)
+@show ahom
+1.0574764348289638
+
+Random.seed!(1);
+ahom, = Rewrite.ahom_for_checkercube(20 + 2 * 10, Rewrite.Tet{Float64}, 3, 1e-4, 60, 5, 2)
+@show ahom
+1.1930881178271788
+```
+"""
+function ahom_for_checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, tol = 1e-4, max_cycles::Int = 20, k_max = 5, smoothing_steps::Int = 2)
     base = hypercube(elementtype, n)
+    sort_element_nodes!(base.elements)
     ξ = @SVector ones(dimension(base))
     ξ /= norm(ξ)
 
     # Generate conductivity
-    Random.seed!(1)
     σ = generate_conductivity(base, n)
     σ_per_el = conductivity_per_element(base, σ)
 
@@ -278,7 +304,10 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
     @info "Building implicit grid"
-    implicit = ImplicitFineGrid(base, refinements)
+    # ImplicitFineGrid(base, 1) is just the base grid, so add 1 to actually
+    # refine things.
+    total_grids = refinements + 1
+    implicit = ImplicitFineGrid(base, total_grids)
     nodes, edges, faces = list_boundary_nodes_edges_faces(implicit.base)
     constraint = ZeroDirichletConstraint(nodes, edges, faces)
 
@@ -296,23 +325,23 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     @info "Allocating state vectors x, b and r"
 
     # Allocate state vectors x, b and r on all levels.
-    level_states = map(1 : refinements) do i
+    level_states = map(1 : total_grids) do i
         mesh = refined_mesh(implicit, i)
         LevelState(nelements(base_mesh(implicit)), nnodes(mesh), Float64)
     end
 
-    finest_level = level_states[refinements]
+    finest_level = level_states[total_grids]
 
     # Allocate previous v
     v_prev = similar(finest_level.x)
 
     @info "Initializing a random x with zero b.c."
     rand!(finest_level.x)
-    broadcast_interfaces!(finest_level.x, implicit, refinements)
-    apply_constraint!(finest_level.x, refinements, constraint, implicit)
+    broadcast_interfaces!(finest_level.x, implicit, total_grids)
+    apply_constraint!(finest_level.x, total_grids, constraint, implicit)
 
     @info "Building the initial local r.h.s."
-    ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, refinements))
+    ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, total_grids))
     rhs_aξ∇v!(finest_level.b, ∂ϕ∂xᵢs, implicit, σ_per_el, ξ)
 
     ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 2.0
@@ -322,10 +351,11 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
     subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
 
     local_sum = zeros(nelements(implicit.base))
-    ops = level_operators[refinements]
+    ops = level_operators[total_grids]
     σs = Vector{Float64}[] # Collect the changes in σ per mg iteration
     rs = Vector{Float64}[] # Collect the residual norms per mg iteration
     λ = 1.0
+    σ_sum = 0.0
 
     for k = 0 : k_max
         @info "Next outer step" k
@@ -340,7 +370,7 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
 
         # Solve the next problem
         for i = 1 : max_cycles
-            vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, smoothing_steps)
+            vcycle!(implicit, base_level, level_operators, level_states, ωs, total_grids, smoothing_steps)
 
             # Initial rhs is special
             fill!(local_sum, 0)
@@ -351,11 +381,13 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
             end
 
             # Compute increment in σ and residual norm
-            zero_out_all_but_one!(finest_level.r, implicit, refinements)
+            zero_out_all_but_one!(finest_level.r, implicit, total_grids)
             push!(σs_k, 2^k * sum(local_sum) / area(ops, implicit, subset))
             push!(rs_k, norm(finest_level.r))
 
-            @info "Next multigrid step" i last(rs_k) last(σs_k)
+            σ_sum′ = σ_sum + last(σs_k)
+
+            @info "Next multigrid step" i last(rs_k) last(σs_k) σ_sum′
 
             # Check convergence
             if i > 1
@@ -382,9 +414,10 @@ function checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, re
 
         push!(σs, σs_k)
         push!(rs, rs_k)
+        σ_sum += last(σs_k)
     end
 
-    σs, rs
+    σ_sum, σs, rs
 end
 
 function compare_refinements_on_same_material(refinements = 2 : 7)
@@ -539,5 +572,51 @@ function next_rhs!(b::AbstractMatrix{Tv}, x::AbstractMatrix{Tv}, implicit::Impli
         # b ← λ * |J| * M * x + b
         my_A_mul_B!(ops.λ * detJ, ops.mass, x, b, offset)
     end
+    nothing
+end
+
+"""
+    checkerboard_hypercube_full(n, eltype, refs, λ)
+
+Solve the problem (λ-∇⋅a∇)u₁ = 1 and (λ-∇⋅ā∇)u₂ = 1 using a direct method and
+save them to a file `checkerboard_full`. Take for instance a not too large
+domain with two refinements in 3D, then ahom ≈ 3.94 according to the docstring
+of [`ahom_for_checkercube`](@ref).
+
+```
+Rewrite.checkerboard_hypercube_full(20, Rewrite.Tet{Float64}, 2, 0.0, 3.94)
+```
+
+In Paraview one can compare the two solutions with the Plot over Line tool.
+"""
+function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements = 2, λ = 0.0, ahom = 3.94)
+    mesh = refine_uniformly(hypercube(elementtype, n), times = refinements)
+    sort_element_nodes!(mesh.elements)
+    @show nnodes(mesh)
+
+    # Conductivity per [0, 1]^d bit
+    σ = generate_conductivity(mesh, n)
+
+    # Simple lookup to get the conductivity per mesh element
+    σ_per_el = conductivity_per_element(mesh, σ)
+    interior = list_interior_nodes(mesh)
+
+    A_full = assemble_checkercube(mesh, σ_per_el, λ)
+    Ā_full = assemble_matrix(mesh, (∇u, ∇v) -> ahom * dot(∇u, ∇v))
+    b_full = assemble_vector(mesh, identity)
+    A = A_full[interior, interior]
+    Ā = Ā_full[interior, interior]
+    b = b_full[interior]
+    x = zeros(nnodes(mesh))
+    x̄ = zeros(nnodes(mesh))
+    x[interior] .= A \ b
+    x̄[interior] .= Ā \ b
+
+    vtk_grid("checkercube_full", mesh) do vtk
+        vtk_point_data(vtk, x, "x")
+        vtk_point_data(vtk, x̄, "x_bar")
+        vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(mesh), :), "σ")
+    end
+
     nothing
 end
