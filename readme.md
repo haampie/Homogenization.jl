@@ -51,8 +51,13 @@ The package uses WriteVTK.jl to output visualizations that can be viewed in [Par
 
 To run the 2D or 3D checkerboard example, try
 
-```
+```julia
 using Homogenization
-ahom_for_checkercube(20 + 2 * 10, Tet{Float64}; boundary_layer = 10, refinements = 3, tol = 1e-4, k_max = 5, smoothing_steps = 2)
+
+# 2D
+ahom_for_checkercube(64 + 2 * 10, Tri{Float64}; boundary_layer = 10, refinements = 3, tol = 1e-4, k_max = 5, smoothing_steps = 2)
+
+# 3D
+ahom_for_checkercube(32 + 2 * 10, Tet{Float64}; boundary_layer = 10, refinements = 2, tol = 1e-4, k_max = 5, smoothing_steps = 2)
 ```
 
