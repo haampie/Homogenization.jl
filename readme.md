@@ -17,7 +17,7 @@ manager in a development mode.
 
 1. Open Julia 1.0 in a terminal
 2. Hit `]` to open the package manager
-3. Enter `dev [url]/Homogenization.jl`
+3. Enter `dev https://github.com/haampie/Homogenization.jl` or `dev git@github.com:haampie/Homogenization.jl.git`
 
 This will copy the latest version of the code to `~/.julia/dev/Homogenization.jl`.
 
