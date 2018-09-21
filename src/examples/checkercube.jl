@@ -74,7 +74,7 @@ function ahom_for_checkercube(
     k_max::Int = 3,
     smoothing_steps::Int = 2,
     boundary_layer::Int = 10,
-    save::Int = nothing
+    save::Int = 0
 )
     0 ≤ save ≤ refinements + 1 || throw(ArgumentError("Parameter `save` can at most be $(refinements+1)"))
 
