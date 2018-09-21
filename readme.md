@@ -25,6 +25,9 @@ To verify things work, run the tests via `] test Homogenization`.
 
 ### Workflow tips
 
+**Editor.** An editor tailored for Julia is [Juno](http://junolab.org/). Also 
+[Visual Studio Code](https://code.visualstudio.com/) with a [Julia extension](https://marketplace.visualstudio.com/items?itemName=julialang.language-julia) is good.
+
 **Development.** It is very convenient to install `Revise.jl` to get a better development 
 and testing experience in Julia. This package will do the minimal recompilation when a 
 function in the package is changed. 
