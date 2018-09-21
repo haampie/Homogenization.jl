@@ -1,6 +1,7 @@
 module Homogenization
 
-export hypercube, Tets, Tet, Tris, Tri, refine_uniformly, Mesh
+export hypercube, Tets, Tet, Tris, Tri, refine_uniformly, Mesh,
+       ahom_for_checkercube
 
 using StaticArrays, WriteVTK
 using SparseArrays, LinearAlgebra, Random, SuiteSparse

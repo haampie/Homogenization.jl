@@ -1,3 +1,9 @@
+#
+# This file contains an implementation of multishift conjugate gradients where one solves
+# (A + σᵢI)xᵢ = b for multiple i's using the same Krylov subspace -- so one matrix-vector
+# product per iteration is necessary while multiple systems are being solved simultaneously.
+# It also contains a reference implementation of CG.
+
 using SparseArrays, Random, LinearAlgebra
 
 import Base: iterate

@@ -1,3 +1,9 @@
+#
+# This file has some code to efficiently generate coefficient fields by fft'ing white noise,
+# transforming things in the frequency domain, and then transforming back.
+# The main issue that is resolved is how to efficiently do in-place transformations when
+# the initial field is real-valued, while the fft returns something complex.
+
 using Base: OneTo
 using AbstractFFTs: ScaledPlan, normalization
 using FFTW

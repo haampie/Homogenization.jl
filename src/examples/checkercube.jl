@@ -1,5 +1,210 @@
 using Statistics: mean
 
+"""
+    ahom_for_checkercube(n, type; refinements, tol, max_cycles, k_max, smoothing_steps, boundary_layer) → σ_sum, σs, rs
+
+Construct a hypercube [1,n]ᵈ on which a checkerboard pattern is constructed with
+unit size length per cell. The dimensionality is defined by the FEM element type that is
+begin passed in the second argument (`Tri{Float64}` or `Tet{Float64}`).
+
+Ω = [1,n]ᵈ is the total domain which *includes* the boundary layer as  well, so the user 
+should typically provide something like `n = 64 + 2 * 10` and `boundary_layer = 10` to get 
+a boundary layer of size `10` and an effective domain of size `64` in each dimension.
+
+A base mesh is constructed with n + 1 nodes in each dimension. This mesh is implicitly 
+refined `refinements` times. 
+
+The `tol` parameter is the absolute tolerance on the homogenized coefficient. 
+
+In total we do kmax steps of JC's algorithm, where we solve the big-L2-term problem with
+multigrid until the tolerance of the homogenized coefficient is met.
+
+Returns the σ parameter from the theorem which is a correction to the homogenized 
+coefficient. In this particular example the homogenized coefficient is ā = 5 - σ.
+
+Also returns some convergence history (intermediate σs and residual norms of the multigrid
+step).
+
+Example 2D:
+```
+# Effective size = 64x64 with boundary layer 84x84.
+
+# With just one refinement we get terrible results!
+σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 1, 1e-4, 60, 5, 2)
+@show σ
+σ = 1.6163911040833774
+
+# With two refinements
+σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 2, 1e-4, 60, 5, 2)
+@show σ
+σ = 1.8172724552722872
+
+# With three refinements
+σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 3, 1e-4, 60, 5, 2)
+@show σ
+σ = 1.9068559447779048
+```
+
+Example 3D:
+```
+σ, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 1, 1e-4, 60, 5, 2)
+@show σ
+0.7811689150982423
+
+σ, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 2, 1e-4, 60, 5, 2)
+@show σ
+1.0574764348289638
+
+σ, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 3, 1e-4, 60, 5, 2)
+@show σ
+1.1930881178271788
+```
+"""
+function ahom_for_checkercube(
+    n::Int, 
+    elementtype::Type{<:ElementType} = Tet{Float64};
+    refinements::Int = 2, 
+    tol::AbstractFloat = 1e-4, 
+    max_cycles::Int = 20, 
+    k_max::Int = 3,
+    smoothing_steps::Int = 2,
+    boundary_layer::Int = 10,
+)
+
+    base = hypercube(elementtype, n)
+
+    # This ξ should be an argument to the function, but in the case of the checkerboard it
+    # does not really matter anyways
+    ξ = @SVector ones(dimension(base))
+    ξ /= norm(ξ)
+
+    # Generate conductivity
+    σ_per_el = conductivity_per_element(base, generate_conductivity(base, n))
+
+    @info "Building a coarse grid"
+    interior = list_interior_nodes(base)
+    F = cholesky(assemble_checkercube(base, σ_per_el, 1.0)[interior,interior])
+    base_level = BaseLevel(Float64, F, nnodes(base), interior)
+
+    @info "Building implicit grid"
+    # ImplicitFineGrid(base, 1) is just the base grid, so add 1 to actually
+    # refine things.
+    total_grids = refinements + 1
+    implicit = ImplicitFineGrid(base, total_grids)
+    nodes, edges, faces = list_boundary_nodes_edges_faces(implicit.base)
+    constraint = ZeroDirichletConstraint(nodes, edges, faces)
+
+    @info "Built!" implicit
+    @info "Building diffusion operators and mass matrices"
+
+    # Build the local operators.
+    diff_terms = build_local_diffusion_operators(implicit.reference)
+    mass_terms = build_local_mass_matrices(implicit.reference)
+    level_operators = map(zip(diff_terms, mass_terms)) do op
+        diff, mass = op
+        L2PlusDivAGrad(diff, mass, constraint, 1.0, σ_per_el)
+    end
+
+    @info "Allocating state vectors x, b and r"
+
+    # Allocate state vectors x, b and r on all levels.
+    level_states = map(1 : total_grids) do i
+        mesh = refined_mesh(implicit, i)
+        LevelState(nelements(base_mesh(implicit)), nnodes(mesh), Float64)
+    end
+
+    finest_level = level_states[total_grids]
+
+    # Allocate previous v
+    v_prev = similar(finest_level.x)
+
+    @info "Initializing a random x with zero b.c."
+    rand!(finest_level.x)
+    broadcast_interfaces!(finest_level.x, implicit, total_grids)
+    apply_constraint!(finest_level.x, total_grids, constraint, implicit)
+
+    @info "Building the initial local r.h.s."
+    ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, total_grids))
+    rhs_aξ∇v!(finest_level.b, ∂ϕ∂xᵢs, implicit, σ_per_el, ξ)
+
+    ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 2.0
+
+    center = @SVector fill(0.5 * n + 1, dimension(base))
+    radius = float(div(n, 2) - boundary_layer)
+    subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
+
+    local_sum = zeros(nelements(implicit.base))
+    ops = level_operators[total_grids]
+    σs = Vector{Float64}[] # Collect the changes in σ per mg iteration
+    rs = Vector{Float64}[] # Collect the residual norms per mg iteration
+    λ = 1.0
+    σ_sum = 0.0
+
+    for k = 0 : k_max
+        @info "Next outer step" k
+
+        # Keep track of increments in σ and residual norms of multigrid
+        σs_k = Float64[]
+        rs_k = Float64[]
+
+        # Construct a coarse grid operator
+        F = cholesky(assemble_checkercube(base, σ_per_el, λ)[interior,interior])
+        base_level = BaseLevel(Float64, F, nnodes(base), interior)
+
+        # Solve the next problem
+        for i = 1 : max_cycles
+            vcycle!(implicit, base_level, level_operators, level_states, ωs, total_grids, smoothing_steps)
+
+            # Initial rhs is special
+            fill!(local_sum, 0)
+            if k == 0
+                sum_first_term!(local_sum, finest_level.x, ∂ϕ∂xᵢs, implicit, subset, ops, σ_per_el, ξ)
+            else
+                sum_terms!(local_sum, finest_level.x, v_prev, implicit, subset, ops)
+            end
+
+            # Compute increment in σ and residual norm
+            zero_out_all_but_one!(finest_level.r, implicit, total_grids)
+            push!(σs_k, 2^k * sum(local_sum) / area(ops, implicit, subset))
+            push!(rs_k, norm(finest_level.r))
+
+            σ_sum′ = σ_sum + last(σs_k)
+
+            @info "Next multigrid step" i last(rs_k) last(σs_k) σ_sum′
+
+            # Check convergence
+            if i > 1
+                # See if there is still some change in the correction to the homogenized
+                # coefficient -- potential issue: we don't really take into account that
+                # multigrid might just converge too slowly! But this seems an OK criterion.
+                abs(σs_k[end] - σs_k[end-1]) < tol && break
+            end
+        end
+
+        # Our current x becomes our previous x; keep x as initial guess for next round
+        copyto!(v_prev, finest_level.x)
+        λ /= 2
+
+        # Update the fine grid operator (just λ)
+        for operator in level_operators
+            operator.λ = λ
+        end
+
+        # Update the right-hand side.
+        next_rhs!(finest_level.b, finest_level.x, implicit, ops)
+
+        # Select a new integration domain
+        radius = ceil(radius / sqrt(2))
+        subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
+
+        push!(σs, σs_k)
+        push!(rs, rs_k)
+        σ_sum += last(σs_k)
+    end
+
+    σ_sum, σs, rs
+end
+
 # There's probably a nicer way to do this, but let's just define
 # the weighted dot product like this for 2D and 3D.
 @propagate_inbounds function weighted_dot(∇u::SVector{3}, σ::SVector{3}, ∇v::SVector{3})
@@ -228,195 +433,6 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
     end
 
     rs
-end
-
-"""
-    ahom_for_checkercube(n, type, refinements, tol, max_cycles, kmax, smoothingsteps) → σ_sum, σs, rs
-
-Construct a hypercube [1,n]ᵈ on which a checkerboard pattern is constructed with
-unit size length per cell. This makes the base mesh that is being refined 
-`refinements` times (the coarse grid operator is factorized!). The `tol`
-parameter is the absolute tolerance on the homogenized coefficient. In total we
-do kmax steps of JC's algorithm, where we solve the big-L2-term problem with
-multigrid until the tolerance of the homogenized coefficient is met.
-
-Boundary layer is FIXED to be 10 cells on every side!
-
-Returns the σ param from the theorem and some convergence history (intermediate
-σs and residuals of the multigrid step).
-
-The homogenized coefficients ā = 5 - σ.
-
-Example 2D:
-```
-# Effective size = 64x64 with boundary layer 84x84.
-
-# With just one refinement we get terrible results!
-Random.seed!(1)
-σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 1, 1e-4, 60, 5, 2)
-@show σ
-σ = 1.6163911040833774
-
-# With two refinements
-Random.seed!(1)
-σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 2, 1e-4, 60, 5, 2)
-@show σ
-σ = 1.8172724552722872
-
-# With three refinements
-Random.seed!(1)
-ahom, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 3, 1e-4, 60, 5, 2)
-@show ahom
-ahom = 1.9068559447779048
-```
-
-Example 3D:
-```
-Random.seed!(1);
-ahom, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 1, 1e-4, 60, 5, 2)
-@show ahom
-0.7811689150982423
-
-Random.seed!(1);
-ahom, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 2, 1e-4, 60, 5, 2)
-@show ahom
-1.0574764348289638
-
-Random.seed!(1);
-ahom, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 3, 1e-4, 60, 5, 2)
-@show ahom
-1.1930881178271788
-```
-"""
-function ahom_for_checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, tol = 1e-4, max_cycles::Int = 20, k_max = 5, smoothing_steps::Int = 2)
-    base = hypercube(elementtype, n)
-    ξ = @SVector ones(dimension(base))
-    ξ /= norm(ξ)
-
-    # Generate conductivity
-    σ = generate_conductivity(base, n)
-    σ_per_el = conductivity_per_element(base, σ)
-
-    @info "Building a coarse grid"
-    interior = list_interior_nodes(base)
-    F = cholesky(assemble_checkercube(base, σ_per_el, 1.0)[interior,interior])
-    base_level = BaseLevel(Float64, F, nnodes(base), interior)
-
-    @info "Building implicit grid"
-    # ImplicitFineGrid(base, 1) is just the base grid, so add 1 to actually
-    # refine things.
-    total_grids = refinements + 1
-    implicit = ImplicitFineGrid(base, total_grids)
-    nodes, edges, faces = list_boundary_nodes_edges_faces(implicit.base)
-    constraint = ZeroDirichletConstraint(nodes, edges, faces)
-
-    @info "Built!" implicit
-    @info "Building diffusion operators and mass matrices"
-
-    # Build the local operators.
-    diff_terms = build_local_diffusion_operators(implicit.reference)
-    mass_terms = build_local_mass_matrices(implicit.reference)
-    level_operators = map(zip(diff_terms, mass_terms)) do op
-        diff, mass = op
-        L2PlusDivAGrad(diff, mass, constraint, 1.0, σ_per_el)
-    end
-
-    @info "Allocating state vectors x, b and r"
-
-    # Allocate state vectors x, b and r on all levels.
-    level_states = map(1 : total_grids) do i
-        mesh = refined_mesh(implicit, i)
-        LevelState(nelements(base_mesh(implicit)), nnodes(mesh), Float64)
-    end
-
-    finest_level = level_states[total_grids]
-
-    # Allocate previous v
-    v_prev = similar(finest_level.x)
-
-    @info "Initializing a random x with zero b.c."
-    rand!(finest_level.x)
-    broadcast_interfaces!(finest_level.x, implicit, total_grids)
-    apply_constraint!(finest_level.x, total_grids, constraint, implicit)
-
-    @info "Building the initial local r.h.s."
-    ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, total_grids))
-    rhs_aξ∇v!(finest_level.b, ∂ϕ∂xᵢs, implicit, σ_per_el, ξ)
-
-    ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 2.0
-
-    center = @SVector fill(0.5 * n + 1, dimension(base))
-    radius = float(div(n, 2) - 10)
-    subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
-
-    local_sum = zeros(nelements(implicit.base))
-    ops = level_operators[total_grids]
-    σs = Vector{Float64}[] # Collect the changes in σ per mg iteration
-    rs = Vector{Float64}[] # Collect the residual norms per mg iteration
-    λ = 1.0
-    σ_sum = 0.0
-
-    for k = 0 : k_max
-        @info "Next outer step" k
-
-        # Keep track of increments in σ and residual norms of multigrid
-        σs_k = Float64[]
-        rs_k = Float64[]
-
-        # Construct a coarse grid operator
-        F = cholesky(assemble_checkercube(base, σ_per_el, λ)[interior,interior])
-        base_level = BaseLevel(Float64, F, nnodes(base), interior)
-
-        # Solve the next problem
-        for i = 1 : max_cycles
-            vcycle!(implicit, base_level, level_operators, level_states, ωs, total_grids, smoothing_steps)
-
-            # Initial rhs is special
-            fill!(local_sum, 0)
-            if k == 0
-                sum_first_term!(local_sum, finest_level.x, ∂ϕ∂xᵢs, implicit, subset, ops, σ_per_el, ξ)
-            else
-                sum_terms!(local_sum, finest_level.x, v_prev, implicit, subset, ops)
-            end
-
-            # Compute increment in σ and residual norm
-            zero_out_all_but_one!(finest_level.r, implicit, total_grids)
-            push!(σs_k, 2^k * sum(local_sum) / area(ops, implicit, subset))
-            push!(rs_k, norm(finest_level.r))
-
-            σ_sum′ = σ_sum + last(σs_k)
-
-            @info "Next multigrid step" i last(rs_k) last(σs_k) σ_sum′
-
-            # Check convergence
-            if i > 1
-                # Error w.r.t. 1st order Richardson extrapolation
-                abs(σs_k[end] - σs_k[end-1]) < tol && break
-            end
-        end
-
-        # Our current x becomes our previous x; keep x as initial guess for next round
-        copyto!(v_prev, finest_level.x)
-        λ /= 2
-
-        # Update the fine grid operator (just λ)
-        for operator in level_operators
-            operator.λ = λ
-        end
-
-        # Update the right-hand side.
-        next_rhs!(finest_level.b, finest_level.x, implicit, ops)
-
-        # Select a new integration domain
-        radius = ceil(radius / sqrt(2))
-        subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
-
-        push!(σs, σs_k)
-        push!(rs, rs_k)
-        σ_sum += last(σs_k)
-    end
-
-    σ_sum, σs, rs
 end
 
 function compare_refinements_on_same_material(refinements = 2 : 7)
