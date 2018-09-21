@@ -58,9 +58,14 @@ To run the 2D or 3D checkerboard example, try
 using Homogenization
 
 # 2D
-ahom_for_checkercube(64 + 2 * 10, Tri{Float64}; boundary_layer = 10, refinements = 3, tol = 1e-4, k_max = 5, smoothing_steps = 2)
+ahom_for_checkercube(64 + 2 * 10, Tri{Float64}; boundary_layer = 10, refinements = 3, tol = 1e-4, k_max = 3, smoothing_steps = 2, save = 1)
 
 # 3D
-ahom_for_checkercube(32 + 2 * 10, Tet{Float64}; boundary_layer = 10, refinements = 2, tol = 1e-4, k_max = 5, smoothing_steps = 2)
+ahom_for_checkercube(32 + 2 * 10, Tet{Float64}; boundary_layer = 10, refinements = 2, tol = 1e-4, k_max = 3, smoothing_steps = 2, save = 1)
 ```
 
+This will output a lot of data about the intermediate steps of multigrid and will save the
+intermediate approximate solutions of the recurrence `v₀`, `v₁`, ... to separate
+files `ahom_0.vtu`, `ahom_1.vtu`, ... in the current working directory. It also creates a 
+file `checkerboard.vtu` with the coefficient field. To not save these files use `save = 0`. 
+Open the files in Paraview for a visualization.

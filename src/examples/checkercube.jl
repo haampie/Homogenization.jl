@@ -1,7 +1,7 @@
 using Statistics: mean
 
 """
-    ahom_for_checkercube(n, type; refinements, tol, max_cycles, k_max, smoothing_steps, boundary_layer) → σ_sum, σs, rs
+    ahom_for_checkercube(n, type; refinements, tol, max_cycles, k_max, smoothing_steps, boundary_layer, save) → σ_sum, σs, rs
 
 Construct a hypercube [1,n]ᵈ on which a checkerboard pattern is constructed with
 unit size length per cell. The dimensionality is defined by the FEM element type that is
@@ -14,10 +14,15 @@ a boundary layer of size `10` and an effective domain of size `64` in each dimen
 A base mesh is constructed with n + 1 nodes in each dimension. This mesh is implicitly 
 refined `refinements` times. 
 
-The `tol` parameter is the absolute tolerance on the homogenized coefficient. 
+In total we do `k_max` steps of JC's algorithm, where we solve the big-L2-term problem with
+multigrid until the tolerance of the homogenized coefficient is met; the `tol` parameter 
+is the absolute tolerance on the homogenized coefficient. 
 
-In total we do kmax steps of JC's algorithm, where we solve the big-L2-term problem with
-multigrid until the tolerance of the homogenized coefficient is met.
+To visualize intermediate solutions as well as the checkerboard pattern, one can use the 
+`save` keyword argument. Set `save = 0` to store nothing at all. If `save = 1`, this will 
+store the `v`'s on the coarsest grid without refinements. If `save = refinements + 1`, this 
+will store the `v`'s on the finest grid -- this will typically make your computer run out of
+memory! Best is to set `save = 1` or `save = 2`.
 
 Returns the σ parameter from the theorem which is a correction to the homogenized 
 coefficient. In this particular example the homogenized coefficient is ā = 5 - σ.
@@ -69,7 +74,9 @@ function ahom_for_checkercube(
     k_max::Int = 3,
     smoothing_steps::Int = 2,
     boundary_layer::Int = 10,
+    save::Int = nothing
 )
+    0 ≤ save ≤ refinements + 1 || throw(ArgumentError("Parameter `save` can at most be $(refinements+1)"))
 
     base = hypercube(elementtype, n)
 
@@ -85,6 +92,14 @@ function ahom_for_checkercube(
     interior = list_interior_nodes(base)
     F = cholesky(assemble_checkercube(base, σ_per_el, 1.0)[interior,interior])
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
+
+    # Maybe store the base grid
+    if save != 0
+        @info "Saving the grid checkerboard grid"
+        vtk_grid("checkerboard", base) do vtk
+            vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(base), :), "a")
+        end
+    end
 
     @info "Building implicit grid"
     # ImplicitFineGrid(base, 1) is just the base grid, so add 1 to actually
@@ -178,6 +193,13 @@ function ahom_for_checkercube(
                 # coefficient -- potential issue: we don't really take into account that
                 # multigrid might just converge too slowly! But this seems an OK criterion.
                 abs(σs_k[end] - σs_k[end-1]) < tol && break
+            end
+        end
+
+        # Maybe store the intermediate vₖ's.
+        if save !== 0
+            vtk_grid("ahom_$k", construct_full_grid(implicit, save)) do vtk
+                vtk_point_data(vtk, finest_level.x[1 : nnodes(refined_mesh(implicit, save)), :][:], "v")
             end
         end
 
