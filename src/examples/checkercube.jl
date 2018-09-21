@@ -65,7 +65,7 @@ function ahom_for_checkercube(
     elementtype::Type{<:ElementType} = Tet{Float64};
     refinements::Int = 2, 
     tol::AbstractFloat = 1e-4, 
-    max_cycles::Int = 20, 
+    max_cycles::Int = 60, 
     k_max::Int = 3,
     smoothing_steps::Int = 2,
     boundary_layer::Int = 10,

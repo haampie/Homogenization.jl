@@ -23,8 +23,36 @@ This will copy the latest version of the code to `~/.julia/dev/Homogenization.jl
 
 To verify things work, run the tests via `] test Homogenization`.
 
+### Workflow tips
 
+**Development.** It is very convenient to install `Revise.jl` to get a better development 
+and testing experience in Julia. This package will do the minimal recompilation when a 
+function in the package is changed. 
+
+1. Install it via `] add Revise`.
+2. Then in a standard Julia terminal run `using Revise`
+3. Only then write `using Homogenization`.
+
+**Threading.** To make use of threading and some more optimized code, one can start Julia
+in the terminal as follows:
+
+```
+JULIA_NUM_THREADS=N julia -O3
+```
+
+here `N` is the number of threads avaiable -- it is best to set it to the number of cores
+on the machine.
 
 ## Visualization
 
 The package uses WriteVTK.jl to output visualizations that can be viewed in [Paraview](https://www.paraview.org/).
+
+## Example usage
+
+To run the 2D or 3D checkerboard example, try
+
+```
+using Homogenization
+ahom_for_checkercube(20 + 2 * 10, Tet{Float64}; boundary_layer = 10, refinements = 3, tol = 1e-4, k_max = 5, smoothing_steps = 2)
+```
+
