@@ -97,6 +97,9 @@ function ahom_for_checkercube(
     if save != 0
         @info "Saving the grid checkerboard grid"
         vtk_grid("checkerboard", base) do vtk
+            # WriteVTK.jl wants us to deliver a matrix of size dim × nelements for 
+            # vectorial data, so we just reshape and reinterpret the vector of static 
+            # vectors `σ_per_el`.
             vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(base), :), "a")
         end
     end
@@ -199,6 +202,8 @@ function ahom_for_checkercube(
         # Maybe store the intermediate vₖ's.
         if save !== 0
             vtk_grid("ahom_$k", construct_full_grid(implicit, save)) do vtk
+                # extract the nodal values of `x` on implicit grid number `save` and 
+                # enumerate them as a long vector.
                 vtk_point_data(vtk, finest_level.x[1 : nnodes(refined_mesh(implicit, save)), :][:], "v")
             end
         end
