@@ -1,5 +1,5 @@
 using Test
-using Rewrite: sort_bitonic
+using Homogenization: sort_bitonic
 
 @testset "Bitonic sorting tricks" begin
 

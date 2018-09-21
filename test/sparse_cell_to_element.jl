@@ -1,4 +1,4 @@
-using Rewrite: compress, EdgeToEl, ElementId
+using Homogenization: compress, EdgeToEl, ElementId
 using Test
 
 @testset "Sparse cell to element" begin

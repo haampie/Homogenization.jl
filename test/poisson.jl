@@ -1,7 +1,7 @@
-using Rewrite: assemble_matrix, assemble_vector, refine_uniformly, 
-               Mesh, list_interior_nodes, nnodes, nelements, sort_element_nodes!,
-               cube, list_faces, remove_repeated_pairs!, remove_duplicates!,
-               radix_sort!, complement
+using Homogenization: assemble_matrix, assemble_vector, refine_uniformly, 
+                      Mesh, list_interior_nodes, nnodes, nelements, sort_element_nodes!,
+                      cube, list_faces, remove_repeated_pairs!, remove_duplicates!,
+                      radix_sort!, complement
 
 using StaticArrays
 using WriteVTK

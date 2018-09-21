@@ -1,4 +1,4 @@
-using Rewrite: Mesh, refine_uniformly, list_boundary_edges, compress
+using Homogenization: Mesh, refine_uniformly, list_boundary_edges, compress
 using StaticArrays
 using Test
 

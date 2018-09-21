@@ -173,7 +173,6 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
     σ_per_el = conductivity_per_element(base, σ)
 
     ### Coarse grid.
-    sort_element_nodes!(base.elements)
     interior = list_interior_nodes(base)
     F = cholesky(assemble_checkercube(base, σ_per_el, 0.0)[interior,interior])
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
@@ -254,19 +253,19 @@ Example 2D:
 
 # With just one refinement we get terrible results!
 Random.seed!(1)
-σ, = ahom_for_checkercube(64 + 2 * 10, Rewrite.Tri{Float64}, 1, 1e-4, 60, 5, 2)
+σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 1, 1e-4, 60, 5, 2)
 @show σ
 σ = 1.6163911040833774
 
 # With two refinements
 Random.seed!(1)
-σ, = ahom_for_checkercube(64 + 2 * 10, Rewrite.Tri{Float64}, 2, 1e-4, 60, 5, 2)
+σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 2, 1e-4, 60, 5, 2)
 @show σ
 σ = 1.8172724552722872
 
 # With three refinements
 Random.seed!(1)
-ahom, = ahom_for_checkercube(64 + 2 * 10, Rewrite.Tri{Float64}, 3, 1e-4, 60, 5, 2)
+ahom, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 3, 1e-4, 60, 5, 2)
 @show ahom
 ahom = 1.9068559447779048
 ```
@@ -274,24 +273,23 @@ ahom = 1.9068559447779048
 Example 3D:
 ```
 Random.seed!(1);
-ahom, = Rewrite.ahom_for_checkercube(20 + 2 * 10, Rewrite.Tet{Float64}, 1, 1e-4, 60, 5, 2)
+ahom, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 1, 1e-4, 60, 5, 2)
 @show ahom
 0.7811689150982423
 
 Random.seed!(1);
-ahom, = Rewrite.ahom_for_checkercube(20 + 2 * 10, Rewrite.Tet{Float64}, 2, 1e-4, 60, 5, 2)
+ahom, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 2, 1e-4, 60, 5, 2)
 @show ahom
 1.0574764348289638
 
 Random.seed!(1);
-ahom, = Rewrite.ahom_for_checkercube(20 + 2 * 10, Rewrite.Tet{Float64}, 3, 1e-4, 60, 5, 2)
+ahom, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 3, 1e-4, 60, 5, 2)
 @show ahom
 1.1930881178271788
 ```
 """
 function ahom_for_checkercube(n::Int, elementtype::Type{<:ElementType} = Tet{Float64}, refinements::Int = 2, tol = 1e-4, max_cycles::Int = 20, k_max = 5, smoothing_steps::Int = 2)
     base = hypercube(elementtype, n)
-    sort_element_nodes!(base.elements)
     ξ = @SVector ones(dimension(base))
     ξ /= norm(ξ)
 
@@ -585,7 +583,7 @@ domain with two refinements in 3D, then ahom ≈ 3.94 according to the docstring
 of [`ahom_for_checkercube`](@ref).
 
 ```
-Rewrite.checkerboard_hypercube_full(20, Rewrite.Tet{Float64}, 2, 0.0, 3.94)
+checkerboard_hypercube_full(20, Tet{Float64}, 2, 0.0, 3.94)
 ```
 
 In Paraview one can compare the two solutions with the Plot over Line tool.

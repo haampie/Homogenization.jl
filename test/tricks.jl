@@ -1,5 +1,6 @@
 using Test
-using Rewrite: remove_duplicates!, remove_singletons!, left_minus_right!, remove_repeated_pairs!
+using Homogenization: remove_duplicates!, remove_singletons!, left_minus_right!, 
+                      remove_repeated_pairs!
 
 @testset "Remove duplicates from sorted vector" begin
     @test remove_duplicates!([]) == []

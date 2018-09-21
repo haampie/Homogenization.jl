@@ -1,10 +1,10 @@
-using Rewrite: refined_element, Tris, Mesh, Tris64, Tets64, affine_map,
-               refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
-               nodes_on_ref_edges, interfaces, face_to_elements, edge_to_elements,
-               nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior,
-               get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
-               construct_full_grid, ZeroDirichletConstraint, list_boundary_nodes_edges_faces,
-               refined_mesh, apply_constraint!
+using Homogenization: refined_element, Tris, Mesh, Tris64, Tets64, affine_map,
+                      refine_uniformly, edge_graph, sort_element_nodes!, nodes_on_ref_faces,
+                      nodes_on_ref_edges, interfaces, face_to_elements, edge_to_elements,
+                      nelements, nnodes, nodes_per_face_interior, nodes_per_edge_interior,
+                      get_reference_normals, Tet, node_to_elements, ImplicitFineGrid,
+                      construct_full_grid, ZeroDirichletConstraint, 
+                      list_boundary_nodes_edges_faces, refined_mesh, apply_constraint!
 using StaticArrays
 using WriteVTK
 

@@ -1,4 +1,4 @@
-using Rewrite: hypercube, Tet, nnodes, nelements
+using Homogenization: hypercube, Tet, nnodes, nelements
 using Test
 
 @testset "cube" begin

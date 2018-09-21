@@ -1,6 +1,6 @@
-using Rewrite: Mesh, refine_uniformly, sort_element_nodes!, nnodes, nelements,
-               refined_mesh, base_mesh, ImplicitFineGrid, distribute!,
-               construct_full_grid
+using Homogenization: Mesh, refine_uniformly, sort_element_nodes!, nnodes, nelements,
+                      refined_mesh, base_mesh, ImplicitFineGrid, distribute!,
+                      construct_full_grid
 using StaticArrays
 using WriteVTK
 using Test

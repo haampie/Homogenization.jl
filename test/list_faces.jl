@@ -1,4 +1,5 @@
-using Rewrite: list_boundary_nodes_edges_faces, Mesh, refine_uniformly, list_interior_nodes
+using Homogenization: list_boundary_nodes_edges_faces, Mesh, refine_uniformly, 
+                      list_interior_nodes
 using Test
 using StaticArrays
 

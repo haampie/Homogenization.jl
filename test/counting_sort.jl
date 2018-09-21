@@ -1,6 +1,6 @@
 using Test
 
-using Rewrite: radix_sort!, generate_random_elements, sort_element_nodes!
+using Homogenization: radix_sort!, generate_random_elements, sort_element_nodes!
 
 @testset "Counting sort" begin
     v = generate_random_elements(100, 25, 4)

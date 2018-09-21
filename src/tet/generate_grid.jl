@@ -40,5 +40,7 @@ function hypercube(::Type{<:Tet{Tv}}, n::Int, Ti::Type{<:Integer} = Int; scale =
         elements[element_idx += 1] = (n2,n6,n7,n8)
     end
 
+    sort_element_nodes!(elements)
+
     return Mesh(nodes, elements)
 end

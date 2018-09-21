@@ -1,4 +1,5 @@
-using Rewrite: refined_element, reference_element, nodes_on_ref_faces, nodes_on_ref_edges, Tets64
+using Homogenization: refined_element, reference_element, nodes_on_ref_faces, 
+                      nodes_on_ref_edges, Tets64
 using Test
 
 @testset "Refined tet" begin

@@ -1,4 +1,4 @@
-module Rewrite
+module Homogenization
 
 export hypercube, Tets, Tet, Tris, Tri, refine_uniformly, Mesh
 

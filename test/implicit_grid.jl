@@ -1,5 +1,5 @@
 using Test
-using Rewrite: sort_element_nodes!, refine_uniformly, Mesh,
+using Homogenization: sort_element_nodes!, refine_uniformly, Mesh,
                ImplicitFineGrid, cell_type, default_quad, update_J,
                ElementValues, refined_mesh, nodes_per_face_interior, reinit!,
                get_x, valrange

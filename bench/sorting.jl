@@ -1,6 +1,6 @@
 using BenchmarkTools
 using Base: OneTo
-using Rewrite: sort_element_nodes!, radix_sort!
+using Homogenization: sort_element_nodes!, radix_sort!
 
 function just_the_elements()
     return @benchmark sort_element_nodes!(v) setup = (v = generate_random_elements(1_000, 69, 4))

@@ -1,5 +1,5 @@
 using WriteVTK
-using Rewrite
+using Homogenization
 using IterativeSolvers
 
 """
@@ -97,7 +97,7 @@ function save_stuff(N = 4, ξ = (1/√2, 1/√2), ref = 3, Δt = 1.0)
 
     L = 2 ^ N
     n = 2 ^ (N + ref) + 2
-    σs = Rewrite.generate_field((n, n), Float64, 8, 20.0, 1.2)
+    σs = Homogenization.generate_field((n, n), Float64, 8, 20.0, 1.2)
     h = 1 / 2 ^ ref
     xs_boundary = linspace(0, L, n - 1)
     xs_cell = xs_boundary[1:end-1] .+ h / 2

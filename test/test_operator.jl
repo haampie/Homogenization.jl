@@ -1,10 +1,10 @@
 using Test
 using LinearAlgebra
 using StaticArrays, WriteVTK
-using Rewrite: build_local_diffusion_operators, Mesh, refine_uniformly, nelements, nnodes,
-               ImplicitFineGrid, construct_full_grid, refined_mesh,
-               broadcast_interfaces!, assemble_matrix, list_boundary_nodes_edges_faces,
-               ZeroDirichletConstraint, SimpleDiffusion
+using Homogenization: build_local_diffusion_operators, Mesh, refine_uniformly, nelements, 
+                      nnodes, ImplicitFineGrid, construct_full_grid, refined_mesh,
+                      broadcast_interfaces!, assemble_matrix, list_boundary_nodes_edges_faces,
+                      ZeroDirichletConstraint, SimpleDiffusion
 
 function example_operator()
     levels = 5
