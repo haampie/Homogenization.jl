@@ -5,7 +5,7 @@ This package provides some tools to do large-scale homogenization of elliptic PD
 
 Features include:
 1. Support for very fine grids for finite elements without storing the grid / matrix 
-   explicitly.
+   explicitly -- should just work on a laptop or workstation computer.
 2. A geometric multigrid solver
 3. An algorithm to approximate the homogenized coefficients of an elliptic operator with 
    piece-wise continuous coefficients
