@@ -1,7 +1,6 @@
 module Homogenization
 
-export hypercube, Tets, Tet, Tris, Tri, refine_uniformly, Mesh,
-       ahom_for_checkercube
+export hypercube, Tets, Tet, Tris, Tri, refine_uniformly, Mesh, ahom_checkerboard
 
 using StaticArrays, WriteVTK
 using SparseArrays, LinearAlgebra, Random, SuiteSparse
@@ -31,9 +30,9 @@ include("build_local_operators.jl")
 include("multigrid.jl")
 include("apply_local_operators.jl")
 
-include("examples/checkercube.jl")
-include("../tools/generate_st1_field.jl")
+include("examples/homogenized_coefficients.jl")
 include("fast_mv_product.jl")
-include("examples/large_matrix_free_mg.jl")
+include("examples/solve_pde.jl")
 
+# include("../tools/generate_st1_field.jl")
 end

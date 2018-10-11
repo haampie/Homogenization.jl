@@ -1,7 +1,7 @@
 using Statistics: mean
 
 """
-    ahom_for_checkercube(n, type; refinements, tol, max_cycles, k_max, smoothing_steps, boundary_layer, save) → σ_sum, σs, rs
+    ahom_checkerboard(n, type; refinements, tol, max_cycles, k_max, smoothing_steps, boundary_layer, save) → σ_sum, σs, rs
 
 Construct a hypercube [1,n]ᵈ on which a checkerboard pattern is constructed with
 unit size length per cell. The dimensionality is defined by the FEM element type that is
@@ -35,37 +35,37 @@ Example 2D:
 # Effective size = 64x64 with boundary layer 84x84.
 
 # With just one refinement we get terrible results!
-σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 1, 1e-4, 60, 5, 2)
+σ, = ahom_checkerboard(64 + 2 * 10, Tri{Float64}, 1, 1e-4, 60, 5, 2)
 @show σ
 σ = 1.6163911040833774
 
 # With two refinements
-σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 2, 1e-4, 60, 5, 2)
+σ, = ahom_checkerboard(64 + 2 * 10, Tri{Float64}, 2, 1e-4, 60, 5, 2)
 @show σ
 σ = 1.8172724552722872
 
 # With three refinements
-σ, = ahom_for_checkercube(64 + 2 * 10, Tri{Float64}, 3, 1e-4, 60, 5, 2)
+σ, = ahom_checkerboard(64 + 2 * 10, Tri{Float64}, 3, 1e-4, 60, 5, 2)
 @show σ
 σ = 1.9068559447779048
 ```
 
 Example 3D:
 ```
-σ, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 1, 1e-4, 60, 5, 2)
+σ, = ahom_checkerboard(20 + 2 * 10, Tet{Float64}, 1, 1e-4, 60, 5, 2)
 @show σ
 0.7811689150982423
 
-σ, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 2, 1e-4, 60, 5, 2)
+σ, = ahom_checkerboard(20 + 2 * 10, Tet{Float64}, 2, 1e-4, 60, 5, 2)
 @show σ
 1.0574764348289638
 
-σ, = ahom_for_checkercube(20 + 2 * 10, Tet{Float64}, 3, 1e-4, 60, 5, 2)
+σ, = ahom_checkerboard(20 + 2 * 10, Tet{Float64}, 3, 1e-4, 60, 5, 2)
 @show σ
 1.1930881178271788
 ```
 """
-function ahom_for_checkercube(
+function ahom_checkerboard(
     n::Int, 
     elementtype::Type{<:ElementType} = Tet{Float64};
     refinements::Int = 2, 
@@ -90,7 +90,7 @@ function ahom_for_checkercube(
 
     @info "Building a coarse grid"
     interior = list_interior_nodes(base)
-    F = cholesky(assemble_checkercube(base, σ_per_el, 1.0)[interior,interior])
+    F = cholesky(assemble_checkerboard(base, σ_per_el, 1.0)[interior,interior])
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
     # Maybe store the base grid
@@ -166,7 +166,7 @@ function ahom_for_checkercube(
         rs_k = Float64[]
 
         # Construct a coarse grid operator
-        F = cholesky(assemble_checkercube(base, σ_per_el, λ)[interior,interior])
+        F = cholesky(assemble_checkerboard(base, σ_per_el, λ)[interior,interior])
         base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
         # Solve the next problem
@@ -245,7 +245,7 @@ end
 """
 Build the operator for the bilinear form B[u,v] = ∫λuv + a∇u⋅∇v.
 """
-function assemble_checkercube(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{SVector{dim,Tv}}, λ::Tv = 1.0) where {dim,N,Tv,Ti}
+function assemble_checkerboard(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{SVector{dim,Tv}}, λ::Tv = 1.0) where {dim,N,Tv,Ti}
     cell = cell_type(mesh)
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
@@ -406,7 +406,7 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
 
     ### Coarse grid.
     interior = list_interior_nodes(base)
-    F = cholesky(assemble_checkercube(base, σ_per_el, 0.0)[interior,interior])
+    F = cholesky(assemble_checkerboard(base, σ_per_el, 0.0)[interior,interior])
     base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
     ### Fine grid
@@ -454,7 +454,7 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
 
     full_mesh = construct_full_grid(implicit, save)
 
-    vtk_grid("checkercube_full_$refinements", full_mesh) do vtk
+    vtk_grid("checkerboard_full_$refinements", full_mesh) do vtk
         vtk_point_data(vtk, finest_level.x[1 : nnodes(refined_mesh(implicit, save)), :][:], "x")
         # vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(full_mesh), :), "σ")
     end
@@ -465,7 +465,7 @@ end
 function compare_refinements_on_same_material(refinements = 2 : 7)
     results = []
     for ref = refinements
-        push!(results, checkercube(148, Tri{Float64}, ref, 1e-4, 50, 5, 2))
+        push!(results, checkerboard(148, Tri{Float64}, ref, 1e-4, 50, 5, 2))
     end
     refinements, results
     #plot(vcat([abs.(results[end][1][i] .- (2results[end][1][i][end] - results[end][1][i][end-1])) for i = 1 : 6]...), yscale = :log10, mark = :o)
@@ -623,7 +623,7 @@ end
 Solve the problem (λ-∇⋅a∇)u₁ = 1 and (λ-∇⋅ā∇)u₂ = 1 using a direct method and
 save them to a file `checkerboard_full`. Take for instance a not too large
 domain with two refinements in 3D, then ahom ≈ 3.94 according to the docstring
-of [`ahom_for_checkercube`](@ref).
+of [`ahom_checkerboard`](@ref).
 
 ```
 checkerboard_hypercube_full(20, Tet{Float64}, 2, 0.0, 3.94)
@@ -643,7 +643,7 @@ function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = 
     σ_per_el = conductivity_per_element(mesh, σ)
     interior = list_interior_nodes(mesh)
 
-    A_full = assemble_checkercube(mesh, σ_per_el, λ)
+    A_full = assemble_checkerboard(mesh, σ_per_el, λ)
     Ā_full = assemble_matrix(mesh, (∇u, ∇v) -> ahom * dot(∇u, ∇v))
     b_full = assemble_vector(mesh, identity)
     A = A_full[interior, interior]
@@ -654,7 +654,7 @@ function checkerboard_hypercube_full(n::Int, elementtype::Type{<:ElementType} = 
     x[interior] .= A \ b
     x̄[interior] .= Ā \ b
 
-    vtk_grid("checkercube_full", mesh) do vtk
+    vtk_grid("checkerboard_full", mesh) do vtk
         vtk_point_data(vtk, x, "x")
         vtk_point_data(vtk, x̄, "x_bar")
         vtk_cell_data(vtk, reshape(reinterpret(Float64, σ_per_el), dimension(mesh), :), "σ")

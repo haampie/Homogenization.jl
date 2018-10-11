@@ -66,7 +66,7 @@ function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Me
 
         # Apply the ops finally.
         for i = 1 : dim, j = 1 : dim
-            my_A_mul_B!(α * P[i, j] * detJ, A.A.ops[i, j], x, y, offset)
+            my_A_mul_B!(α * P[i, j] * detJ * A.a, A.A.ops[i, j], x, y, offset)
         end
     end
 end
@@ -113,7 +113,9 @@ function do_share_of_mv_product!(thread_id::Int, nthreads::Int, α::Tv, base::Me
         end
 
         # Mass matrix term
-        my_A_mul_B!(α * A.λ * detJ, A.mass, x, y, offset)
+        if !iszero(α * A.λ * detJ)
+            my_A_mul_B!(α * A.λ * detJ, A.mass, x, y, offset)
+        end
     end
 end
 

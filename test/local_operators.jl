@@ -76,7 +76,7 @@ function test_multigrid(T::Type{<:ElementType} = Tet; iterations = 25, save = fa
     # Build the operators
     println("Building the local operators")
     level_operators = map(build_local_diffusion_operators(implicit.reference)) do op
-        SimpleDiffusion(op, constraint)
+        SimpleDiffusion(op, constraint, 1.0)
     end
 
     # x is initially random with values matching on the interfaces and 0 on the boundary

@@ -15,5 +15,5 @@ function WriteVTK.vtk_grid(filename::Union{String,WriteVTK.MultiblockFile}, mesh
     celltype = cell_to_vtk(mesh)
     cells = [MeshCell(celltype, SVector(element)) for element in mesh.elements]
     coords = reshape(reinterpret(Tv, mesh.nodes), (dim, length(mesh.nodes)))
-    return vtk_grid(filename, coords, cells, compress = 1)
+    return vtk_grid(filename, coords, cells, compress = 0)
 end

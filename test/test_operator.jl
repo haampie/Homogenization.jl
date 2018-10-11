@@ -21,7 +21,7 @@ function example_operator()
     broadcast_interfaces!(local_x, implicit, levels)
     local_y = zeros(nnodes(local_fine), nelements(implicit.base))
     constraint = ZeroDirichletConstraint(list_boundary_nodes_edges_faces(implicit.base)...)
-    local_A = SimpleDiffusion(build_local_diffusion_operators(implicit.reference)[levels], constraint)
+    local_A = SimpleDiffusion(build_local_diffusion_operators(implicit.reference)[levels], constraint, 1.0)
 
     # Construct fine grid with repeated nodes
     fine_grid_repeated_nodes = construct_full_grid(implicit, levels)

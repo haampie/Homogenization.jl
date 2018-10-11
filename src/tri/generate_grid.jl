@@ -4,7 +4,7 @@
 Create a square of size scale * (n x n) where each cell is split into two 
 triangles.
 """
-function hypercube(::Type{<:Tri{Tv}}, n::Int, Ti::Type{<:Integer} = Int; scale = 1, origin = (1, 1)) where {Tv}
+function hypercube(::Type{<:Tri{Tv}}, n::Int, Ti::Type{<:Integer} = Int; scale = 1, origin = (1, 1), sorted = true) where {Tv}
     Nn = (n + 1) * (n + 1)
     Ne = 2 * n * n
     nn = reshape(1 : Nn, n + 1, n + 1)
@@ -30,7 +30,7 @@ function hypercube(::Type{<:Tri{Tv}}, n::Int, Ti::Type{<:Integer} = Int; scale =
         elements[element_idx += 1] = (n2, n3, n4)
     end
 
-    sort_element_nodes!(elements)
+    sorted && sort_element_nodes!(elements)
 
     return Mesh(nodes, elements)
 end

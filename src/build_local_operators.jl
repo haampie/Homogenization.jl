@@ -8,16 +8,19 @@ struct ∫ϕₓᵢϕₓⱼ{dim,Tv,Ti}
 end
 
 """
-We store the local operator and the constraint.
+SimpleDiffusion is an operator of the form L = -a * Δ with a some
+diffusivity constant. For ease we also store the dirichlet boundary
+condition with it.
 """
 struct SimpleDiffusion{dim,Tv,Ti,Tc<:ZeroDirichletConstraint} <: LocalLinearOperator
     A::∫ϕₓᵢϕₓⱼ{dim,Tv,Ti}
     bc::Tc
+    a::Tv
 end
 
 """
 Contains all the necessary data to perform a matrix-vector product with
-the operator L = I - λ∇⋅σ∇ where σ is constant in each coarse element. Also
+the operator L = λI - ∇⋅σ∇ where σ is constant in each coarse element. Also
 contains the Dirichlet boundary constraint.
 """
 mutable struct L2PlusDivAGrad{T,U,V,W,X} <: LocalLinearOperator
