@@ -72,7 +72,7 @@ function more_testing(n::Int = 5, ahom = 3.0)
     l = 3
 
     # Create a very coarse grid that serves as the coarsest grid for the homogenized operator
-    very_coarse_base = hypercube(Tri{Float64}, 2^m, scale = 2^k, origin = (1,1,1), sorted = false)
+    very_coarse_base = hypercube(Tri{Float64}, 2^m, scale = 2^k, origin = (1,1,1), sorted = true)
 
     # Then refine that grid to a total of n times, and assign a conductivity to each of these elements
     finer_base = refine_uniformly(very_coarse_base, times = k)
@@ -121,15 +121,17 @@ function more_testing(n::Int = 5, ahom = 3.0)
 
     ωs = fill(0.001, total_grids)
 
-    for i = 1 : 10
+    for i = 1 : 1000
         vcyle_with_ahom!(implicit, base_level, A_fine_op, A_hom_ops, level_states, ωs, total_grids, 10)
 
         # Check the residual norm
         zero_out_all_but_one!(level_states[total_grids].r, implicit, total_grids)
         @show norm(level_states[total_grids].r)
 
-        vtk_grid("pde_$i", construct_full_grid(implicit, k)) do vtk
-            vtk_point_data(vtk, level_states[total_grids].x[1 : nnodes(refined_mesh(implicit, k)), :][:], "x")
+        vtk_grid("pde_$i", construct_full_grid(implicit, total_grids-2)) do vtk
+            @show nnodes(refined_mesh(implicit, total_grids-2))
+            vtk_point_data(vtk, level_states[total_grids].x[1 : nnodes(refined_mesh(implicit, total_grids-2)), :][:], "x")
+            vtk_point_data(vtk, level_states[total_grids].b[1 : nnodes(refined_mesh(implicit, total_grids-2)), :][:], "b")
         end
     end
 
@@ -144,13 +146,13 @@ function vcyle_with_ahom!(implicit, base_level, A_fine_op, A_hom_ops, levels, ω
         smoothing_step!(implicit, A_fine_op, ωs[k], levels[k], k)
     end
 
-    # Do a 'coarse grid' solve with the homogenized operator.
-    vcycle!(implicit, base_level, A_hom_ops, levels, ωs, k, 2)
+    # # Do a 'coarse grid' solve with the homogenized operator.
+    # vcycle!(implicit, base_level, A_hom_ops, levels, ωs, k, 2)
 
-    # Smooth with the -∇⋅∇ operator
-    for i = 1 : steps
-        smoothing_step!(implicit, A_fine_op, ωs[k], levels[k], k)
-    end
+    # # Smooth with the -∇⋅∇ operator
+    # for i = 1 : steps
+    #     smoothing_step!(implicit, A_fine_op, ωs[k], levels[k], k)
+    # end
 end
 
 conductivity_checkerboard(mesh::Mesh{3}, n) = [rand() < 0.5 ? 9.0 : 1.0 for i = 1:2^n, j=1:2^n, k=1:2^n]
