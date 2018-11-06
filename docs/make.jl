@@ -11,10 +11,4 @@ makedocs(
 	]
 )
 
-deploydocs(
-	repo = "github.com/haampie/Homogenization.jl.git",
-	target = "build",
-	osname = "linux",
-	deps = nothing,
-	make = nothing,
-)
+deploydocs(repo = "github.com/haampie/Homogenization.jl.git")

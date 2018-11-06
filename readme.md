@@ -1,3 +1,5 @@
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://haampie.github.io/Homogenization.jl/dev)
+
 # Homogenization.jl
 
 This package provides some tools to do large-scale homogenization of elliptic PDEs in 2D and
