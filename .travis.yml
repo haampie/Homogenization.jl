@@ -8,3 +8,12 @@ notifications:
 after_success:
   - julia -e 'using Pkg, Coverage, Homogenization; cd(joinpath(dirname(pathof(Homogenization)), "..")); Codecov.submit(process_folder())'
   - julia -e 'using Pkg, Homogenization; cd(joinpath(dirname(pathof(Homogenization)), "..")); include(joinpath("docs", "make.jl"))'
+jobs:
+  include:
+    - stage: "Documentation"
+      julia: 1.0
+      os: linux
+      script:
+        - julia --project=docs/ -e 'using Pkg; Pkg.instantiate(); Pkg.develop(PackageSpec(path=pwd()))'
+        - julia --project=docs/ docs/make.jl
+      after_success: skip
