@@ -1,4 +1,4 @@
-[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://haampie.github.io/Homogenization.jl/dev)
+[![Build Status](https://travis-ci.org/haampie/Homogenization.jl.svg?branch=master)](https://travis-ci.org/haampie/Homogenization.jl) [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://haampie.github.io/Homogenization.jl/dev)
 
 # Homogenization.jl
 
