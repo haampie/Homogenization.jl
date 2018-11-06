@@ -1,8 +1,8 @@
 # Homogenization.jl
 
-| **Documentation**           | **Build Status**                                                                     |
-|:---------------------------:|:------------------------------------------------------------------------------------:|
-| [![](docs-badge)](docs-url) | [![Build Status](travis-badge)](travis-url) [![codecov](codecov-badge)](codecov-url) |
+| **Documentation**           | **Build Status**                                                  |
+|:---------------------------:|:-----------------------------------------------------------------:|
+| [![][docs-badge]][docs-url] | [![][travis-badge]][travis-url] [![][codecov-badge]][codecov-url] |
 
 This package provides some tools to do large-scale homogenization of elliptic PDEs in 2D and
 3D.
