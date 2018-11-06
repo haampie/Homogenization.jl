@@ -2,3 +2,4 @@
 *.pvd
 statprof
 *.jld
+docs/build

@@ -1,0 +1,10 @@
+language: julia
+os:
+    - linux
+julia:
+    - 1.0
+notifications:
+    email: false
+after_success:
+  - julia -e 'using Pkg, Coverage, Homogenization; cd(joinpath(dirname(pathof(Homogenization)), "..")); Codecov.submit(process_folder())'
+  - julia -e 'using Pkg, Homogenization; cd(joinpath(dirname(pathof(Homogenization)), "..")); include(joinpath("docs", "make.jl"))'
