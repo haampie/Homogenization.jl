@@ -1,6 +1,8 @@
-[![Build Status](https://travis-ci.org/haampie/Homogenization.jl.svg?branch=master)](https://travis-ci.org/haampie/Homogenization.jl) [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://haampie.github.io/Homogenization.jl/dev)
-
 # Homogenization.jl
+
+| **Documentation**           | **Build Status**                                                                     |
+|:---------------------------:|:------------------------------------------------------------------------------------:|
+| [![](docs-badge)](docs-url) | [![Build Status](travis-badge)](travis-url) [![codecov](codecov-badge)](codecov-url) |
 
 This package provides some tools to do large-scale homogenization of elliptic PDEs in 2D and
 3D.
@@ -71,3 +73,10 @@ intermediate approximate solutions of the recurrence `v₀`, `v₁`, ... to sepa
 files `ahom_0.vtu`, `ahom_1.vtu`, ... in the current working directory. It also creates a 
 file `checkerboard.vtu` with the coefficient field. To not save these files use `save = 0`. 
 Open the files in Paraview for a visualization.
+
+[travis-badge]: https://travis-ci.org/haampie/Homogenization.jl.svg?branch=master
+[travis-url]: https://travis-ci.org/haampie/Homogenization.jl
+[docs-badge]: https://img.shields.io/badge/docs-dev-blue.svg
+[docs-url]: https://haampie.github.io/Homogenization.jl/dev
+[codecov-badge]: https://codecov.io/gh/haampie/Homogenization.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/haampie/Homogenization.jl
