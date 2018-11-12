@@ -13,7 +13,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Tutorial",
     "title": "Homogenization.jl",
     "category": "section",
-    "text": "Consider the problem -nabla cdot a(x) nabla u + lambda u = f in 2D and 3D where a is a symmetric matrix with piecewise constant coefficients in the domain U subset mathbbR^d with d = 2 3."
+    "text": "Consider the problem -nabla cdot a(x) nabla u + lambda u = f in 2D and 3D where a is a symmetric, positive definite matrix with piecewise constant coefficients in the domain U subset mathbbR^d with d = 2 3 lambda  0 and u = 0 on partial U."
 },
 
 {
@@ -41,11 +41,19 @@ var documenterSearchIndex = {"docs": [
 },
 
 {
+    "location": "#Solving-a-\"coarse\"-FEM-problem-1",
+    "page": "Tutorial",
+    "title": "Solving a \"coarse\" FEM problem",
+    "category": "section",
+    "text": "For the moment let\'s stick to a very coarse grid for the checkerboard as we have it with just four nodes on the corners of each checkerboard cell (one node per cell). The weak form reads int_U a nabla u cdot nabla v + lambda uv = int fvfor u v in the appropriate space, which we discretize by taking piece-wise linear elements for u and v Let\'s take f = lambda = 1This is done as follows:using Homogenization: assemble_checkerboard, assemble_vector\nA = assemble_checkerboard(base, a, 1.0)\nb = assemble_vector(base, identity)The above does not take into account that u is supposed to be zero at the boundary. To impose the boundary condition we have to detect the boundary in the mesh first.  This is rather simple:using Homogenization: list_interior_nodes\ninterior = list_interior_nodes(base)The boundary condition is simply imposed by partitioning the unknowns x = beginbmatrixx_i  x_bendbmatrix^T such that the linear system reads:beginbmatrixA_ii  A_ib  A_bi  A_bbendbmatrixbeginbmatrixx_i  x_bendbmatrix = beginbmatrixb_i  b_bendbmatrixWith the boundary nodes x_b = 0 this comes down to solving A_iix_i = b_iusing Homogenization: nnodes\nA_int = A[interior, interior]\nb_int = b[interior]\nx_int = A_int \\ b_int\nx = zeros(nnodes(base))\nx[interior] .= x_intFinally we would like to visualize the FEM solution in Paraview, which is done as follows:vtk_grid(\"checkerboard\", base) do vtk\n    as_matrix = reshape(reinterpret(Float64, a), dimension(base), :)\n    vtk_cell_data(vtk, as_matrix, \"a\")\n    vtk_point_data(vtk, x, \"x\")\nendAnd it will look more or less like(Image: Paraview solution)"
+},
+
+{
     "location": "#Implicit-refinement-1",
     "page": "Tutorial",
     "title": "Implicit refinement",
     "category": "section",
-    "text": "In FEM we wish to do h-refinement of this triangulation, but the fully refined grid is assumed to be too large to store explicitly."
+    "text": "The coarse FEM problem will have a large error as the coefficients are rough and the number of nodes per checkerboard cell is approximately one. Therefore we wish to do h-refinement. The assumption will be that we will not be able to store the fully refined grid (nodes and elements) and neither the corresponding discrete operator (A_int).It makes sense to try multigrid to get h-refinement"
 },
 
 ]}
