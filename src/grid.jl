@@ -1,5 +1,21 @@
 using Base: @propagate_inbounds
 
+"""
+    Mesh(nodes, elements) -> Mesh{dim,N,Tv,Ti}
+
+Stores the FEM mesh where the spatial dimension is `dim`,
+the number of nodes per element is `N`, the number type
+is `Tv` and the integer type `Ti`.
+
+# Example
+
+```julia
+using StaticArrays
+nodes = SVector{3,Float64}[(0,0,0),(1,0,0),(0,1,0),(1,1,0),(0,0,1),(1,0,1),(0,1,1),(1,1,1)]
+elements = [(1,2,3,5),(2,3,4,8),(3,5,7,8),(2,5,6,8),(2,3,5,8)]
+cube = Mesh(nodes, elements)
+```
+"""
 struct Mesh{dim,N,Tv,Ti}
     nodes::Vector{SVector{dim,Tv}}
     elements::Vector{NTuple{N,Ti}}

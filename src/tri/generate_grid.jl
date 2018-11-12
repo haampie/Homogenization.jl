@@ -1,8 +1,7 @@
 """
-    hypercube(Tri{Float64}, n; scale = 1) -> Mesh
+    hypercube(Tri{Float64}, n, Ti = Int; scale = 1, origin = (1,1,1), sorted = true) -> Mesh
 
-Create a square of size scale * (n x n) where each cell is split into two 
-triangles.
+Create a mesh of `n` by `n` squares each split into two triangles.
 """
 function hypercube(::Type{<:Tri{Tv}}, n::Int, Ti::Type{<:Integer} = Int; scale = 1, origin = (1, 1), sorted = true) where {Tv}
     Nn = (n + 1) * (n + 1)

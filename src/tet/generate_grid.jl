@@ -1,8 +1,7 @@
 """
-    hypercube(Tet{Float64}, n; scale = 1) -> Mesh
+    hypercube(Tet{Float64}, n, Ti = Int; scale = 1, origin = (1,1,1), sorted = true) -> Mesh
 
-Create a cube of size scale * (n x n x n) where each cell is split into 5 
-tetrahedra.
+Create a mesh of `n` by `n` by `n` cubes each split into 5 tetrahedra.
 """
 function hypercube(::Type{<:Tet{Tv}}, n::Int, Ti::Type{<:Integer} = Int; scale = 1, origin = (1,1,1), sorted = true) where {Tv}
     Nn = (n + 1) * (n + 1) * (n + 1)

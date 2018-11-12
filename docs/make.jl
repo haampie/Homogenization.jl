@@ -7,7 +7,7 @@ makedocs(
 	clean = true,
 	sitename = "Homogenization.jl",
 	pages = [
-		"Home" => "index.md"
+		"Tutorial" => "index.md"
 	]
 )
 
