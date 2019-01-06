@@ -23,10 +23,10 @@ function init_values(cell::Type{<:ElementType{dim,ndof,Tv}}, quad::QuadRule{dim,
     xs = get_points(quad)
 
     # Evaluate the basis functions in the quad points.
-    ϕ_values = SVector(ntuple(j -> SVector(ntuple(i -> ϕs[i](xs[j])::Tv, Val{ndof})), Val{nquad}))
+    ϕ_values = SVector(ntuple(j -> SVector(ntuple(i -> ϕs[i](xs[j])::Tv, ndof)), nquad))
 
     # Assume gradients are constant for now.
-    ∇ϕ_values_reference = hcat(ntuple(i -> gradient(ϕs[i], @SVector(zeros(Tv,dim))), Val{ndof})...)
+    ∇ϕ_values_reference = hcat(ntuple(i -> gradient(ϕs[i], @SVector(zeros(Tv,dim))), ndof)...)
     xs_matrix_reference = hcat(xs.data...)
 
     # Offset

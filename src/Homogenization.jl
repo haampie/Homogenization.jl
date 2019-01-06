@@ -32,7 +32,5 @@ include("apply_local_operators.jl")
 
 include("examples/homogenized_coefficients.jl")
 include("fast_mv_product.jl")
-include("examples/solve_pde.jl")
 
-# include("../tools/generate_st1_field.jl")
 end

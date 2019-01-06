@@ -145,8 +145,6 @@ function ahom_checkerboard(
     ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, total_grids))
     rhs_aξ∇v!(finest_level.b, ∂ϕ∂xᵢs, implicit, σ_per_el, ξ)
 
-    ωs = [.028,.028,.028,.028,.028,.028,.028,.028] ./ 2.0
-
     center = @SVector fill(0.5 * n + 1, dimension(base))
     radius = float(div(n, 2) - boundary_layer)
     subset = select_cells_to_integrate_over(base_mesh(implicit), center, radius)
@@ -171,7 +169,7 @@ function ahom_checkerboard(
 
         # Solve the next problem
         for i = 1 : max_cycles
-            vcycle!(implicit, base_level, level_operators, level_states, ωs, total_grids, smoothing_steps)
+            vcycle!(implicit, base_level, level_operators, level_states, total_grids, smoothing_steps)
 
             # Initial rhs is special
             fill!(local_sum, 0)
@@ -249,7 +247,7 @@ function assemble_checkerboard(mesh::Mesh{dim,N,Tv,Ti}, σs::Vector{SVector{dim,
     cell = cell_type(mesh)
     quadrature = default_quad(cell)
     weights = get_weights(quadrature)
-    element_values = ElementValues(cell, quadrature, update_gradients | update_det_J)
+    element_values = init_values(cell, quadrature, update_gradients | update_det_J)
 
     total = N * N * nelements(mesh)
     is, js, vs = Vector{Ti}(undef, total), Vector{Ti}(undef, total), Vector{Tv}(undef, total)
@@ -438,13 +436,12 @@ function checkerboard_hypercube_multigrid(n::Int, elementtype::Type{<:ElementTyp
     apply_constraint!(finest_level.x, refinements, constraint, implicit)
     local_rhs!(finest_level.b, implicit)
 
-    ωs = [.28,.060,.060,.060,.060,.060,.060,.028]
     rs = Float64[]
 
     # Solve the next problem
     for i = 1 : max_cycles
         println("Cycle ", i)
-        vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, 3)
+        vcycle!(implicit, base_level, level_operators, level_states, refinements, 3)
 
         # Compute increment in σ and residual norm
         zero_out_all_but_one!(finest_level.r, implicit, refinements)

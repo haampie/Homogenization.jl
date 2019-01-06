@@ -8,6 +8,8 @@ struct LevelState{T,Tv<:AbstractMatrix{T}}
     x::Tv
     b::Tv
     r::Tv
+    p::Tv
+    Ap::Tv
 end
 
 """
@@ -17,7 +19,9 @@ function LevelState(total_base_elements::Int, total_fine_nodes::Int, Tv::Type{<:
     x = zeros(Tv, total_fine_nodes, total_base_elements)
     b = zero(x)
     r = zero(x)
-    LevelState{Tv,typeof(x)}(x, b, r)
+    p = zero(x)
+    Ap = zero(x)
+    LevelState{Tv,typeof(x)}(x, b, r, p, Ap)
 end
 
 """
@@ -37,20 +41,36 @@ function BaseLevel(Tv::Type{<:Number}, F, total_nodes::Integer, interior_nodes::
 end
 
 """
-Performs a single Richardson iteration
+Performs a few CG iterations
 """
-function smoothing_step!(implicit::ImplicitFineGrid, ops::LocalLinearOperator, ω, curr::LevelState, k::Int)
-    # r ← b - A * x
-    local_residual!(implicit, ops, curr, k)
+function smoothing_steps!(steps::Integer, implicit::ImplicitFineGrid, ops::LocalLinearOperator, curr::LevelState, k::Int)
 
     # Global residual
+    # r ← b - A * x
+    local_residual!(implicit, ops, curr, k)
     broadcast_interfaces!(curr.r, implicit, k)
 
-    # x ← x + ω * r
-    axpy!(ω, curr.r, curr.x)
+    copyto!(curr.p, curr.r)
+    rsqrprev = dot(curr.r, curr.r) # todo, make sure things are not counted multiple times.
+
+    for i = 1 : steps
+        # Global product # Ap = A * p
+        fill!(curr.Ap, 0.0)
+        mul!(1.0, implicit.base, ops, curr.p, curr.Ap)
+        apply_constraint!(curr.Ap, k, ops.constraint, implicit)
+        broadcast_interfaces!(curr.Ap, implicit, k)
+
+        # Alpha coefficient
+        α = rsqrprev / dot(curr.p, curr.Ap); # todo: dot product
+        axpy!(α, curr.p, curr.x)
+        axpy!(-α, curr.Ap, curr.r)
+        rsqr = dot(curr.r, curr.r) # todo: dot product
+        curr.p .= curr.r .+ (rsqr / rsqrprev) .* curr.p # almost an axpy
+        rsqrprev = rsqr;
+    end
 end
 
-function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LocalLinearOperator}, levels::Vector{<:LevelState}, ωs::Vector, k::Int, steps = 1)
+function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:LocalLinearOperator}, levels::Vector{<:LevelState}, k::Int, steps = 2)
     if k == 1
         broadcast_interfaces!(levels[1].b, implicit, 1)
 
@@ -77,9 +97,7 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Loca
         P = implicit.reference.interops[k - 1]
 
         # Smooth
-        for i = 1 : steps
-            smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-        end
+        smoothing_steps!(steps, implicit, ops[k], curr, k)
 
         local_residual!(implicit, ops[k], curr, k)
 
@@ -88,15 +106,13 @@ function vcycle!(implicit::ImplicitFineGrid, base::BaseLevel, ops::Vector{<:Loca
         fill!(next.x, 0.0)
 
         # Cycle: solve PᵀAPxₖ₋₁ = bₖ₋₁ approximately.
-        vcycle!(implicit, base, ops, levels, ωs, k - 1)
+        vcycle!(implicit, base, ops, levels, k - 1)
 
         # Interpolate: xₖ ← xₖ + Pxₖ₋₁
         interpolate_and_sum_to!(curr.x, P, next.x)
 
         # Smooth
-        for i = 1 : steps
-            smoothing_step!(implicit, ops[k], ωs[k], curr, k)
-        end
+        smoothing_steps!(steps, implicit, ops[k], curr, k)
     end
 
     return nothing
