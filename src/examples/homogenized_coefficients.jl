@@ -1,5 +1,99 @@
 using Statistics: mean
 
+compute_boundary_layer(λ) = floor(Int, 5 * max(1.0, λ^-0.5) * max(1.0, log2(λ^-0.5)))
+compute_box_radius(k, n, ε = 0.0) = floor(Int, 2 ^ (n - k * (0.5 - ε)))
+
+infnorm(x::SVector{2}) = max(abs(x[1]), abs(x[2]))
+infnorm(x::SVector{3}) = max(abs(x[1]), abs(x[2]), abs(x[3]))
+
+elementcenter(mesh, el) = mean(get_nodes(mesh, el))
+
+"""
+Makes a copy of the mesh with nodes and elements sorted by distance to the origin in
+infnorm (elements sorted by the center).
+"""
+function order_nodes_and_elements_by_magnitude(mesh::Mesh{dim,N}) where {dim,N}
+    I = sortperm(mesh.nodes, by = infnorm); J = invperm(I)
+    sorted_mesh = Mesh(mesh.nodes[I], map(mesh.elements) do element
+        return sort_bitonic(ntuple(i -> @inbounds(J[element[i]]), N))
+    end)
+    sort!(sorted_mesh.elements, by = el -> infnorm(elementcenter(sorted_mesh, el)))
+    return sorted_mesh
+end
+
+find_elements_in_radius(mesh::Mesh, radius) = OneTo(searchsortedlast(
+    mesh.elements, 
+    radius, 
+    lt = (dist, el) -> dist < infnorm(elementcenter(mesh, el))
+))
+
+find_nodes_in_radius(mesh::Mesh, radius) = OneTo(searchsortedlast(
+    mesh.nodes,
+    radius + 10eps(),
+    lt = (dist, node) -> dist < infnorm(node)
+))
+
+function example(n = 6, type::Type{ElT} = Tet{Float64}) where {dim,N,Tv,ElT<:ElementType{dim,N,Tv}}
+    λ = 1.0
+
+    # This is the domain which we integrate over
+    box_radius = compute_box_radius(0, n)
+
+    # This is growing boundary layer which is affected by the zero boundary condition
+    boundary_layer = compute_boundary_layer(λ)
+
+    # Half-width of the box of the total domain
+    total_radius = box_radius + boundary_layer
+
+    # Fix some unit vec
+    ξ = @SVector(ones(dim)); ξ /= norm(ξ)
+
+    # The hyperube should be centered at the origin
+    shift = @SVector fill(total_radius, dim)
+
+    # Generate a mesh for the square or cube [-total_radius, total_radius]^d
+    # where the nodes are ordered by distance to the origin
+    base = order_nodes_and_elements_by_magnitude(hypercube(
+        ElT, 
+        2 * total_radius,
+        origin = -shift)
+    )
+
+    # We generate an array with random conductivity coefficients and map them to the mesh
+    cond = conductivity_per_element(
+        base, 
+        generate_conductivity(base, 2 * total_radius),
+        shift .+ 1
+    )
+
+
+    for k = 0 : 5
+
+        # Factorize the coarse grid operator
+        interior = list_interior_nodes(base)
+        F = cholesky(assemble_checkerboard(base, cond, λ)[interior,interior])
+        base_level = BaseLevel(Float64, F, nnodes(base), interior)
+
+
+        ### Do the integration stuff
+
+
+        ### Shrink the next domain
+        λ /= 2
+        box_radius = compute_box_radius(k + 1, n)
+        boundary_layer = compute_boundary_layer(λ)
+
+        # Our domain grows again, so we just stop here because of boundary layer effects
+        box_radius + boundary_layer > total_radius && break
+        
+        # Otherwise shrink the domain!
+        total_radius = box_radius + boundary_layer
+        shrunken_mesh_nodes = find_nodes_in_radius(base, total_radius)
+        shrunken_mesh_elements = find_elements_in_radius(base, total_radius)
+        base = Mesh(base.nodes[shrunken_mesh_nodes], base.elements[shrunken_mesh_elements])
+    end
+end
+
 """
     ahom_checkerboard(n, type; refinements, tol, max_cycles, k_max, smoothing_steps, boundary_layer, save) → σ_sum, σs, rs
 
@@ -77,6 +171,8 @@ function ahom_checkerboard(
     save::Int = 0
 )
     0 ≤ save ≤ refinements + 1 || throw(ArgumentError("Parameter `save` can at most be $(refinements+1)"))
+
+    side_length = 2^n
 
     base = hypercube(elementtype, n)
 
@@ -379,11 +475,11 @@ rand_cond_2d() = SVector{2,Float64}(rand(Bool) ? 1.0 : 9.0, rand(Bool) ? 1.0 : 9
 For convenience this guy will just return a vector `v` s.t. `v[el_idx]` is a
 tuple of the conductivity in all spatial directions in that element.
 """
-function conductivity_per_element(mesh::Mesh{dim}, σ::Conductivity{Tv,dim}) where {Tv,dim}
+function conductivity_per_element(mesh::Mesh{dim}, σ::Conductivity{Tv,dim}, offset = @SVector(zeros(dim))) where {Tv,dim}
     σ_el = Vector{SVector{dim,Tv}}(undef, nelements(mesh))
 
     for (idx, el) in enumerate(mesh.elements)
-        indices = unsafe_trunc.(Int, mean(get_nodes(mesh, el))).data
+        indices = unsafe_trunc.(Int, mean(get_nodes(mesh, el)) .+ offset).data
         σ_el[idx] = σ.σ[CartesianIndex(indices)]
     end
 
