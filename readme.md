@@ -62,10 +62,10 @@ To run the 2D or 3D checkerboard example, try
 using Homogenization
 
 # 2D
-ahom_checkerboard(64 + 2 * 10, Tri{Float64}; boundary_layer = 10, refinements = 3, tol = 1e-4, k_max = 3, smoothing_steps = 2, save = 1)
+checkerboard_homogenization(5, Tri64, refinements = 1, tolerance = 1e-5, save = true)
 
 # 3D
-ahom_checkerboard(32 + 2 * 10, Tet{Float64}; boundary_layer = 10, refinements = 2, tol = 1e-4, k_max = 3, smoothing_steps = 2, save = 1)
+checkerboard_homogenization(3, Tet64, refinements = 1, tolerance = 1e-5, save = true)
 ```
 
 This will output a lot of data about the intermediate steps of multigrid and will save the
