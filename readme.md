@@ -71,8 +71,8 @@ checkerboard_homogenization(3, Tet64, refinements = 1, tolerance = 1e-5, save = 
 This will output a lot of data about the intermediate steps of multigrid and will save the
 intermediate approximate solutions of the recurrence `v₀`, `v₁`, ... to separate
 files `ahom_0.vtu`, `ahom_1.vtu`, ... in the current working directory. It also creates a 
-file `checkerboard.vtu` with the coefficient field. To not save these files use `save = 0`. 
-Open the files in Paraview for a visualization.
+file `checkerboard.vtu` with the coefficient field. To not save these files use 
+`save = nothing`. Open the files in Paraview for a visualization.
 
 [travis-badge]: https://travis-ci.org/haampie/Homogenization.jl.svg?branch=master
 [travis-url]: https://travis-ci.org/haampie/Homogenization.jl
