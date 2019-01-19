@@ -128,7 +128,7 @@ boundary layer / layer of influence of this b.c. is hard-coded in the
 
 SOME IMPLEMENTATION DETAILS. The algorithm has an 'outer iteration' (over `k` in the 
 article) where `vₖ` is used to compute increments to `σ` and the domain is shrunk; and 
-an 'inner iteration' where `vₖ` is approximately computed with multigrid.
+an 'inner iteration' where `vₖ` is approximately computed with cycles of multigrid.
 
 The outer iteration is stopped `after` n steps OR (more likely) whenever the boundary
 layer grows faster than the domain shrinks.
@@ -137,6 +137,8 @@ For the coarsest grid of multigrid see REFINEMENT. Conjugate gradients is used a
 for multigrid, but it is only approximate due to the way we store the unknowns: nodes on the
 boundaries of checkerboard cells are stored multiple times. The three dot products in each
 step of CG do not take this into account, so there might be a slight error.
+
+The number of iterations of CG can be tweaked with the `smoothing_steps` parameter.
 
 Multigrid accepts an approximate solution whenever the increment to σ is below a certain
 threshold.
