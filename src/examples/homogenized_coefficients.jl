@@ -87,6 +87,14 @@ function export_unknown(base::Mesh{dim}, implicit::ImplicitFineGrid, x::Abstract
 end
 
 """
+    checkerboard_homogenization(n::Int = 4, type::Type = Tri64;
+        refinements::Int = 2,
+        smoothing_steps::Int = 3,
+        tolerance::Float64 = 1e-4,
+        ξ::SVector = random_unit_vec(type),
+        save::Union{Nothing,Int} = nothing
+    ) → σ
+
 Implements a continuous version of "Efficient methods for the estimation of homogenized 
 coefficients" (https://arxiv.org/abs/1609.06674 section 11. Numerical tests).
 
@@ -163,7 +171,7 @@ julia> checkerboard_homogenization(3, Tet64, refinements = 3, tolerance = 1e-4)
 """
 function checkerboard_homogenization(
     n::Int = 4,
-    type::Type{ElT} = Tet{Float64};
+    type::Type{ElT} = Tri64;
     refinements::Int = 2,
     smoothing_steps::Int = 3,
     tolerance::Float64 = 1e-4,
