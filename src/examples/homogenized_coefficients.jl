@@ -1,5 +1,11 @@
 using Statistics: mean
 
+export checkerboard_homogenization
+
+
+"""
+Returns the size of the boundary layer for the operator `λ - ∇⋅A∇`.
+"""
 compute_boundary_layer(λ::Float64) = floor(Int, 5 * max(1.0, λ^-0.5) * max(1.0, log2(λ^-0.5)))
 compute_box_radius(k::Int, n::Int, ε::Float64 = 0.0) = floor(Int, 2 ^ (n - k * (0.5 - ε)))
 
@@ -21,18 +27,30 @@ function order_nodes_and_elements_by_magnitude(mesh::Mesh{dim,N}) where {dim,N}
     return sorted_mesh
 end
 
+"""
+Return a range `r` such that `mesh.elements[r]` all lie within a distance `radius` from
+the origin in infnorm. This requires that the elements are sorted.
+"""
 find_elements_in_radius(mesh::Mesh, radius) = OneTo(searchsortedlast(
     mesh.elements, 
     radius, 
     lt = (dist, el) -> dist < infnorm(elementcenter(mesh, el))
 ))
 
+"""
+Return a range `r` such that `mesh.nodes[r]` all lie within a distance `radius` from
+the origin in infnorm. This requires that the nodes are sorted.
+"""
 find_nodes_in_radius(mesh::Mesh, radius) = OneTo(searchsortedlast(
     mesh.nodes,
     radius + 10eps(),
     lt = (dist, node) -> dist < infnorm(node)
 ))
 
+"""
+When the domain shrinks we also drop all the nodes in the state vectors that lie outside
+the new domain. In principle one can avoid the copy here by working with views.
+"""
 shrink_level_state(l::LevelState{Tv,V}, elements) where {Tv,V} = LevelState{Tv,V}(
     l.x[:, elements],
     l.b[:, elements], 
@@ -41,27 +59,133 @@ shrink_level_state(l::LevelState{Tv,V}, elements) where {Tv,V} = LevelState{Tv,V
     l.Ap[:, elements]
 )
 
-function example(
-    n::Int = 6, 
-    type::Type{ElT} = Tet{Float64},
+function random_unit_vec(::Type{<:ElementType{dim}}) where {dim}
+    ξ = @SVector(ones(dim))
+    return ξ / norm(ξ)
+end
+
+
+"""
+Saves the conductivity info to a file named checkerboard.vtu
+"""
+function export_domain(base::Mesh{dim}, cond::Vector) where {dim}
+    @info "Saving the grid checkerboard grid"
+    vtk_grid("checkerboard", base) do vtk
+        # WriteVTK.jl wants us to deliver a matrix of size dim × nelements for 
+        # vectorial data, so we just reshape and reinterpret the vector of static 
+        # vectors `cond`.
+        vtk_cell_data(vtk, reshape(reinterpret(Float64, cond), dim, :), "a")
+    end
+end
+
+function export_unknown(base::Mesh{dim}, implicit::ImplicitFineGrid, x::AbstractMatrix, k::Int, level::Int) where {dim}
+    vtk_grid("ahom_$k", construct_full_grid(implicit, level)) do vtk
+        # extract the nodal values of `x` on implicit grid number `save` and 
+        # enumerate them as a long vector.
+        vtk_point_data(vtk, x[1 : nnodes(refined_mesh(implicit, level)), :][:], "v")
+    end
+end
+
+"""
+Implements a continuous version of "Efficient methods for the estimation of homogenized 
+coefficients" (https://arxiv.org/abs/1609.06674 section 11. Numerical tests).
+
+The domain is a hypercube [-2^n,2^n]ᵈ on which a checkerboard pattern is generated with
+unit size length per cell. The operator we want to homogenize is of the form 
+`L = -∇⋅A∇` where `A = diag(a_1(x), ..., a_d(x))` and we set `a_i` to be constant in each
+checkerboard cell with values 1 or 9 with equal odds.
+
+One can approximate the values of the homogenized operator `Lhom = L = -∇ ⋅ Ahom∇` as 
+follows:
+
+1. Compute the expected value E of ξ⋅Ahom ξ (in our case simply ½ * 1 + ½ * 9 = 5), 
+2. Fix a unit vector `ξ = @SVector [1.0, 0.0, 0.0]`
+3. Run this function to obtain a correction `σ` to the expected value
+4. Compute the coefficient ξ⋅Ahom ξ ≈ E - σ
+
+Since this function only applies the algorithm to a single generated domain, step 3 and 4
+are to be repeated.
+
+ELEMENT TYPES. This function works both in 2D and 3D -- just set `type = Tri64` for 2D and 
+`type = Tet64` for 3D.
+
+REFINEMENT. To reduce the FEM error, one can refine the grid a few times. Without 
+refinements each checkerboard cell is split in two triangles (2D) or five tetrahedra (3D).
+One level of refinement splits a triangle into four smaller triangles and a tetrahedron into
+eight smaller tetrahedra. By default `refinements = 2`.
+
+BOUNDARY LAYER. We have to set an artificial zero boundary condition of the domain. The 
+boundary layer / layer of influence of this b.c. is hard-coded in the 
+`compute_boundary_layer` function.
+
+SOME IMPLEMENTATION DETAILS. The algorithm has an 'outer iteration' (over `k` in the 
+article) where `vₖ` is used to compute increments to `σ` and the domain is shrunk; and 
+an 'inner iteration' where `vₖ` is approximately computed with multigrid.
+
+The outer iteration is stopped `after` n steps OR (more likely) whenever the boundary
+layer grows faster than the domain shrinks.
+
+For the coarsest grid of multigrid see REFINEMENT. Conjugate gradients is used as a smoother
+for multigrid, but it is only approximate due to the way we store the unknowns: nodes on the
+boundaries of checkerboard cells are stored multiple times. The three dot products in each
+step of CG do not take this into account, so there might be a slight error.
+
+Multigrid accepts an approximate solution whenever the increment to σ is below a certain
+threshold.
+
+To make use of a multithreaded matrix-vector in multigrid, start Julia using
+`JULIA_NUM_THREADS=n julia -O3` where `n` is the number of threads (typically 2, 4 or 8).
+
+EXPORTING. To see the generated checkerboard and the intermediate vₖ's, set the `save`
+parameter to the level of refinement that you want to save. E.g. `vₖ = 1` saves the coarse
+grid, `save = 2` the coarse grid after one refinement step, etc. By default no data is
+exported (which is the setting `save = nothing`).
+
+Example 2D -- initial domain size w/ boundary layer [-37,37]^2:
+```
+julia> # One refinement: Domain size = [-37,37]^2
+julia> checkerboard_homogenization(5, Tri64, refinements = 1, tolerance = 1e-5)
+1.6163911040833774
+julia> checkerboard_homogenization(5, Tri64, refinements = 2, tolerance = 1e-5)
+1.8862838217833766
+julia> checkerboard_homogenization(5, Tri64, refinements = 3, tolerance = 1e-5)
+1.9454383432630586
+```
+Example 3D -- initial domain size w/ boundary layer [-13,13]^3
+```
+julia> checkerboard_homogenization(3, Tet64, refinements = 1, tolerance = 1e-4)
+0.7989162402285056
+julia> checkerboard_homogenization(3, Tet64, refinements = 2, tolerance = 1e-4)
+1.0629164417822408
+julia> checkerboard_homogenization(3, Tet64, refinements = 3, tolerance = 1e-4)
+1.223149465555829
+```
+"""
+function checkerboard_homogenization(
+    n::Int = 4,
+    type::Type{ElT} = Tet{Float64};
     refinements::Int = 2,
     smoothing_steps::Int = 3,
-    max_cycles::Int = 20,
-    tolerance::Float64 = 1e-4
+    tolerance::Float64 = 1e-4,
+    ξ::SVector = random_unit_vec(type),
+    save::Union{Nothing,Int} = nothing
 ) where {dim,N,Tv,ElT<:ElementType{dim,N,Tv}}
+
+    # The coefficient of the big L2-term
     λ = 1.0
+
+    # The correction to the averaged/expected coefficient
+    σ = 0.0
 
     # This is the domain which we integrate over
     box_radius = compute_box_radius(0, n)
 
-    # This is growing boundary layer which is affected by the zero boundary condition
+    # This is growing boundary layer where the solution is affected by the artificial 
+    # zero boundary condition
     boundary_layer = compute_boundary_layer(λ)
 
     # Half-width of the box of the total domain
     total_radius = box_radius + boundary_layer
-
-    # Fix some unit vec
-    ξ = @SVector(ones(dim)); ξ /= norm(ξ)
 
     # The hyperube should be centered at the origin
     shift = @SVector fill(total_radius, dim)
@@ -80,6 +204,9 @@ function example(
         generate_conductivity(base, 2 * total_radius),
         shift .+ 1
     )
+
+    # Maybe export the domain to visualize in paraview
+    save !== nothing && export_domain(base, cond)
 
     # Build the implicit grid
     total_grids = refinements + 1
@@ -114,24 +241,22 @@ function example(
     ∂ϕ∂xᵢs = partial_derivatives_functionals(refined_mesh(implicit, total_grids))
     rhs_aξ∇v!(level_states[end].b, ∂ϕ∂xᵢs, implicit, cond, ξ)
 
-    σ = 0.0
+    for k = 0 : n
 
-    for k = 0 : 5
-
-        @info "Step $k. Mesh details:" box_radius boundary_layer total_radius implicit
+        @info "Step $k. Domain size = [-$total_radius,$total_radius]^$dim:" box_radius boundary_layer implicit
 
         # Factorize the coarse grid operator
         interior = list_interior_nodes(base)
         F = cholesky(assemble_checkerboard(base, cond, λ)[interior,interior])
         base_level = BaseLevel(Float64, F, nnodes(base), interior)
 
-        @info "Done building the new coarse grid operator"
+        @info "Done building the new coarse grid operator. Now running multigrid."
 
         Δσ = 0.0
         Δσ_prev = 0.0
 
         ### Solve for v_k by doing V-cycles until the increment in sigma is sufficiently small
-        for i = 1 : max_cycles
+        for i = 1 : 1000
             vcycle!(implicit, base_level, level_operators, level_states, total_grids, smoothing_steps)
 
             integration_domain_elements = find_elements_in_radius(base, box_radius)
@@ -160,9 +285,12 @@ function example(
         σ += Δσ
 
         ### Shrink the domain
+        @info "Shrinking the domain"
         λ /= 2
         box_radius = compute_box_radius(k + 1, n)
         boundary_layer = compute_boundary_layer(λ)
+
+        save !== nothing && export_unknown(base, implicit, level_states[end].x, k, save)
 
         # Our domain starts growing again, so we just stop here with the iteration
         box_radius + boundary_layer > total_radius && break

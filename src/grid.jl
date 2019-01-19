@@ -30,7 +30,11 @@ abstract type ElementType{dim,N,Tv} end
 abstract type Tri{Tv} <: ElementType{2,3,Tv} end
 abstract type Tet{Tv} <: ElementType{3,4,Tv} end
 
+const Tri64 = Tri{Float64}
 const Tet64 = Tet{Float64}
+
+export Tri64
+export Tet64
 
 cell_type(m::Mesh{2,3,Tv}) where {Tv} = Tri{Tv}
 cell_type(m::Mesh{3,4,Tv}) where {Tv} = Tet{Tv}
