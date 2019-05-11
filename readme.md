@@ -19,7 +19,7 @@ Features include:
 A recommended way to work with the package now is to clone the package via the package 
 manager in a development mode.
 
-1. Open Julia 1.0 in a terminal
+1. Open Julia 1.0+ in a terminal
 2. Hit `]` to open the package manager
 3. Enter `dev https://github.com/haampie/Homogenization.jl` or `dev git@github.com:haampie/Homogenization.jl.git`
 
