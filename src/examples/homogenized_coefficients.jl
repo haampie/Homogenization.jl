@@ -106,7 +106,7 @@ checkerboard cell with values 1 or 9 with equal odds.
 One can approximate the values of the homogenized operator `Lhom = L = -∇ ⋅ Ahom∇` as 
 follows:
 
-1. Compute the expected value E of ξ⋅Ahom ξ (in our case simply ½ * 1 + ½ * 9 = 5), 
+1. Compute the expected value E of ξ⋅A ξ (in our case simply ½ * 1 + ½ * 9 = 5), 
 2. Fix a unit vector `ξ = @SVector [1.0, 0.0, 0.0]`
 3. Run this function to obtain a correction `σ` to the expected value
 4. Compute the coefficient ξ⋅Ahom ξ ≈ E - σ
@@ -147,7 +147,7 @@ To make use of a multithreaded matrix-vector in multigrid, start Julia using
 `JULIA_NUM_THREADS=n julia -O3` where `n` is the number of threads (typically 2, 4 or 8).
 
 EXPORTING. To see the generated checkerboard and the intermediate vₖ's, set the `save`
-parameter to the level of refinement that you want to save. E.g. `vₖ = 1` saves the coarse
+parameter to the level of refinement that you want to save. E.g. `save = 1` saves the coarse
 grid, `save = 2` the coarse grid after one refinement step, etc. By default no data is
 exported (which is the setting `save = nothing`).
 

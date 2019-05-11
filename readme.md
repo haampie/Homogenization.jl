@@ -62,10 +62,10 @@ To run the 2D or 3D checkerboard example, try
 using Homogenization
 
 # 2D
-checkerboard_homogenization(5, Tri64, refinements = 1, tolerance = 1e-5, save = 1)
+checkerboard_homogenization(3, Tri64, refinements = 4, tolerance = 1e-3, save = 1)
 
 # 3D
-checkerboard_homogenization(3, Tet64, refinements = 1, tolerance = 1e-5, save = 1)
+checkerboard_homogenization(1, Tet64, refinements = 4, tolerance = 1e-3, save = 1)
 ```
 
 This will output a lot of data about the intermediate steps of multigrid and will save the
