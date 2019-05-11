@@ -160,7 +160,7 @@ Let's build the above idea in code.
 First we create a base mesh, which is the coarsest mesh of multigrid:
 
 ```julia
-using SparseArrays, LinearAlgebra
+using SparseArrays, LinearAlgebra, Homogenization
 using Homogenization: generate_conductivity, conductivity_per_element, 
                       list_interior_nodes, assemble_checkerboard,
                       nnodes, BaseLevel
@@ -198,7 +198,7 @@ It reads "In total _at most_ 30720 unknowns" since this is the product $N_e * N_
 The `ImplicitFineGrid` type collects a lot of things:
 
 ```julia
-julia> implicit.base # refernece to the base mesh
+julia> implicit.base # reference to the base mesh
 julia> implicit.interfaces.nodes # sparse map from nodes -> connected element + local id
 julia> implicit.interfaces.edges # sparse map from edges -> connected element + local id
 julia> implicit.interfaces.faces # sparse map from faces -> connected element + local id
@@ -281,11 +281,10 @@ Now we can run multigrid iterations:
 ```julia
 using Homogenization: vcycle!, zero_out_all_but_one!
 
-ωs = [.02,.02,.02,.02] # constants in Richardson iteration / smoothing step per level
 smoothing_steps = 1
 
 for i = 1 : 100
-    vcycle!(implicit, base_level, level_operators, level_states, ωs, refinements, smoothing_steps)
+    vcycle!(implicit, base_level, level_operators, level_states, refinements, smoothing_steps)
 
     zero_out_all_but_one!(finest_level.r, implicit, refinements)
     @info "After cycle $i" norm(finest_level.r)
