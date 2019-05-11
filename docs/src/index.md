@@ -268,7 +268,7 @@ broadcast_interfaces!(finest_level.x, implicit, refinements) # sum boundaries
 apply_constraint!(finest_level.x, refinements, constraint, implicit) # impose b.c.
 ```
 
-Our initial guess resides in `finest_level.x` and should of course be nonzero
+Our initial guess resides in `finest_level.x`.
 
 ```julia
 julia> finest_level.x
@@ -292,7 +292,7 @@ for i = 1 : 100
 end
 ```
 
-Unfortunately some constants are chosen by hand currently :(. Running this, the output should be something like:
+Running this, the output should be something like:
 
 ```julia
 ...
