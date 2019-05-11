@@ -6,8 +6,8 @@ export checkerboard_homogenization
 """
 Returns the size of the boundary layer for the operator `λ - ∇⋅A∇`.
 """
-compute_boundary_layer(λ::Float64) = floor(Int, 5 * max(1.0, λ^-0.5) * max(1.0, log2(λ^-0.5)))
-compute_box_radius(k::Int, n::Int, ε::Float64 = 0.0) = floor(Int, 2 ^ (n - k * (0.5 - ε)))
+compute_boundary_layer(λ::Float64, n::Int) = floor(Int, 4(n + 1) * λ^-0.5)
+compute_box_radius(k::Int, n::Int, ε::Float64 = 0.0) = floor(Int, 2^(n - k * (0.5 - ε)))
 
 infnorm(x::SVector{2}) = max(abs(x[1]), abs(x[2]))
 infnorm(x::SVector{3}) = max(abs(x[1]), abs(x[2]), abs(x[3]))
@@ -123,7 +123,7 @@ One level of refinement splits a triangle into four smaller triangles and a tetr
 eight smaller tetrahedra. By default `refinements = 2`.
 
 BOUNDARY LAYER. We have to set an artificial zero boundary condition of the domain. The 
-boundary layer / layer of influence of this b.c. is hard-coded in the 
+boundary layer / layer of influence of this b.c. is determined by the 
 `compute_boundary_layer` function.
 
 SOME IMPLEMENTATION DETAILS. The algorithm has an 'outer iteration' (over `k` in the 
@@ -192,7 +192,7 @@ function checkerboard_homogenization(
 
     # This is growing boundary layer where the solution is affected by the artificial 
     # zero boundary condition
-    boundary_layer = compute_boundary_layer(λ)
+    boundary_layer = compute_boundary_layer(λ, n)
 
     # Half-width of the box of the total domain
     total_radius = box_radius + boundary_layer
@@ -298,7 +298,7 @@ function checkerboard_homogenization(
         @info "Shrinking the domain"
         λ /= 2
         box_radius = compute_box_radius(k + 1, n)
-        boundary_layer = compute_boundary_layer(λ)
+        boundary_layer = compute_boundary_layer(λ, n)
 
         save !== nothing && export_unknown(base, implicit, level_states[end].x, k, save)
 
